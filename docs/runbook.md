@@ -31,7 +31,11 @@ Each phase gates the next. Do not skip verification steps.
 - [ ] If SSO/conditional-access rejects Playwright's bundled Chromium as an
       unmanaged browser, drive the installed Chrome instead: replace
       `--cdp-endpoint http://localhost:9222` in the Hermes config with
-      `--browser chrome --user-data-dir ~/.work-agent-profile`.
+      `--browser chrome --user-data-dir /Users/<you>/.work-agent-profile`
+      (absolute path — MCP args get no tilde expansion).
+      **Confirmed working path (2026-07-10):** CDP attach failed as expected on
+      current Chrome; installed-Chrome + dedicated profile passed SSO and the
+      Phase 2 gate first try. Skip straight here on Chrome 136+.
 
 ## Phase 3 — Per-site probe
 - [ ] `mkdir -p local && cp config/sites.yaml.example local/sites.yaml`
