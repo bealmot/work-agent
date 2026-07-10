@@ -1,0 +1,39 @@
+# Per-site actuation config — TEMPLATE.
+# Copy to local/sites.yaml on the work machine and fill in real hosts.
+# local/ is git-ignored; never commit real internal hostnames.
+#
+# layer: 1 = DOM actions via Playwright (default, preferred)
+#        2 = DOM perception + OS-level clicks via scripts/osclick.py
+# probe notes: record what failed when you tried layer 1, and the date —
+# sites change; re-probe when a layer-2 site gets a big UI update.
+
+sites:
+  - name: zendesk
+    host: example.zendesk.com
+    layer: 1
+    notes: ""
+
+  - name: outlook-web
+    host: outlook.office.com
+    layer: 1
+    notes: ""
+
+  - name: kibana
+    host: kibana.internal.example.com
+    layer: 1
+    notes: ""
+
+  - name: grafana
+    host: grafana.internal.example.com
+    layer: 1
+    notes: "canvas panels unreadable via DOM — layer 3 candidate, read-only"
+
+  - name: redash
+    host: redash.internal.example.com
+    layer: 1
+    notes: ""
+
+  - name: webapp-mgmt
+    host: mgmt.internal.example.com
+    layer: 2
+    notes: "example: rejects synthetic events on action buttons (probed YYYY-MM-DD)"
