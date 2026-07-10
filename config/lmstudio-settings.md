@@ -15,7 +15,7 @@ client request inherits them.
 ## App settings
 | Setting | Value | Why |
 |---------|-------|-----|
-| KV cache quantization | 8-bit | ~halves KV memory — load-bearing at 64k context; negligible quality loss |
+| KV cache quantization | **Off for qwen3.6-35b-a3b** | The model is vision-capable and loads via mlx-vlm, which rejects KV quant ("batched vision path does not support kv cache quantization"). Its A3B MoE KV is small enough that 64k fits unquantized on 48 GB. Enable 8-bit only for text-only models. |
 | Context overflow | Truncate middle | Keeps system prompt + recent turns; prevents silent context-death stalls |
 | Keep model loaded | On | Avoids reload latency between tasks |
 
