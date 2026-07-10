@@ -18,13 +18,13 @@ Each phase gates the next. Do not skip verification steps.
 - [ ] **Gate:** give Hermes a real multi-step coding task (e.g. "write and test a script that parses a sample pcap with tshark"). It must complete without stalling. If it stalls, tune sampling per `config/lmstudio-settings.md` before proceeding.
 
 ## Phase 2 — Browser attach
-- [ ] Quit Chrome fully, run `bash scripts/chrome-debug.sh`, log into your work tools as normal
+- [ ] Try first: quit Chrome fully, run `bash scripts/chrome-debug.sh`, log into your work tools as normal. This attaches to your real profile via CDP, but on Chrome 136+ the default profile typically refuses `--remote-debugging-port` (some managed/older installs still allow it, which is why it's worth trying first).
 - [ ] Start `hermes`; ask it to open your ticket queue and read one ticket title back
 - [ ] **Gate:** Hermes navigates and reads Zendesk in your logged-in session
-- [ ] If corporate policy strips the debug flag: fall back to a dedicated persistent Playwright profile (remove `--cdp-endpoint` from the config so Playwright MCP launches its own browser; log into your tools once in that browser — state persists)
+- [ ] **Expected path on current Chrome (136+):** if the CDP attach is refused, fall back to a dedicated persistent Playwright profile — remove `--cdp-endpoint` from the Hermes config so Playwright MCP launches its own browser; log into your work tools once in that browser and state persists from then on.
 
 ## Phase 3 — Per-site probe
-- [ ] `cp config/sites.yaml.example local/sites.yaml`
+- [ ] `mkdir -p local && cp config/sites.yaml.example local/sites.yaml`
 - [ ] For each of the five webapps, run the probe procedure in
       `skills/browser-ops/SKILL.md` and record layer + dated notes
 - [ ] **Gate:** every site classified in `local/sites.yaml`

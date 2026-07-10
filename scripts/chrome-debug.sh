@@ -25,6 +25,6 @@ for _ in $(seq 1 20); do
   fi
   sleep 0.5
 done
-echo "ERROR: Chrome started but CDP port never came up (corporate policy may strip the flag)." >&2
+echo "ERROR: Chrome started but CDP port never came up (Chrome 136+ refuses --remote-debugging-port on the default user-data-dir as a security change; corporate policy may also strip the flag)." >&2
 echo "Fallback: use a dedicated persistent Playwright profile — see docs/runbook.md." >&2
 exit 1

@@ -19,8 +19,12 @@ check "hermes installed"          command -v hermes
 check "lms CLI present"           test -x "$HOME/.lmstudio/bin/lms"
 check "LM Studio endpoint up"     curl -sf http://localhost:1234/v1/models
 check "model loaded"              sh -c 'curl -sf http://localhost:1234/v1/models | grep -qi qwen'
-check "playwright mcp cached"     npx -y @playwright/mcp@latest --version
-check "chrome CDP up (optional)"  curl -sf http://localhost:9222/json/version
+check "playwright mcp cached"     npx -y @playwright/mcp@0.0.32 --version
+if curl -sf http://localhost:9222/json/version >/dev/null 2>&1; then
+  echo "PASS  chrome CDP up (optional)"; PASS=$((PASS+1))
+else
+  echo "SKIP  chrome CDP up (optional — run scripts/chrome-debug.sh later)"
+fi
 
 echo "==> Tool-call round trip"
 RESP=$(curl -sf http://localhost:1234/v1/chat/completions \

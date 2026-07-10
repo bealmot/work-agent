@@ -15,6 +15,9 @@ Usage:
 Get `win` in the page via:
   ({screenX: window.screenX, screenY: window.screenY,
     outerHeight: window.outerHeight, innerHeight: window.innerHeight})
+
+Coordinates assume the browser window is on the main display; negative
+screenX/screenY from a secondary display will misroute cliclick.
 """
 import json
 import subprocess

@@ -28,6 +28,6 @@ else
 fi
 
 echo "==> Playwright MCP (prime the npx cache)"
-npx -y @playwright/mcp@latest --version
+npx -y @playwright/mcp@0.0.32 --version
 
 echo "==> Done. Next: setup/02-model.sh"

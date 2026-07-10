@@ -23,7 +23,7 @@ mcp_servers:
     command: npx
     args:
       - "-y"
-      - "@playwright/mcp@latest"
+      - "@playwright/mcp@0.0.32"
       - "--cdp-endpoint"
       - "http://localhost:9222"
     timeout: 120

@@ -19,13 +19,13 @@ echo "==> Model download (skips if cached)"
 }
 
 echo "==> Load with 32k context"
-if "$LMS" ps 2>/dev/null | grep -qi "$MODEL"; then
+if "$LMS" ps 2>/dev/null | grep -qiF "$MODEL"; then
   echo "    already loaded"
 else
   "$LMS" load "$MODEL" --context-length 32768 --yes
 fi
 
 echo "==> Verify endpoint"
-curl -sf http://localhost:1234/v1/models | grep -qi "qwen" \
+curl -sf http://localhost:1234/v1/models | grep -qiF "$MODEL" \
   && echo "OK: model serving on http://localhost:1234/v1" \
   || { echo "ERROR: endpoint up but model not listed" >&2; exit 1; }
