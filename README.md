@@ -10,7 +10,8 @@ a git-ignored `local/` directory and is never committed here.
 
 ## Start here
 
-- **Design spec:** [docs/superpowers/specs/2026-07-10-work-agent-design.md](docs/superpowers/specs/2026-07-10-work-agent-design.md)
+1. **Design spec:** [docs/superpowers/specs/2026-07-10-work-agent-design.md](docs/superpowers/specs/2026-07-10-work-agent-design.md)
+2. **Work-machine runbook:** [docs/runbook.md](docs/runbook.md) — the ordered setup + verification procedure
 
 ## Stack at a glance
 
