@@ -1,0 +1,29 @@
+# work-agent Hermes configuration.
+# Copy to ~/.hermes/cli-config.yaml (or merge if one exists).
+# Keys follow NousResearch/hermes-agent cli-config.yaml.example.
+
+model:
+  default: "qwen3.6-35b-a3b-mlx"      # must match the id in `lms ps`
+  provider: "lmstudio"                 # alias for custom OpenAI-compatible
+  base_url: "http://localhost:1234/v1"
+  context_length: 32768                # match the lms load --context-length
+
+skills:
+  creation_nudge_interval: 15
+  # Read-only external skills from the cloned repo; adjust path if cloned
+  # elsewhere. Hermes-created skills still write to ~/.hermes/skills/.
+  external_dirs:
+    - ~/work-agent/skills
+
+agent:
+  max_turns: 60
+
+mcp_servers:
+  playwright:
+    command: npx
+    args:
+      - "-y"
+      - "@playwright/mcp@latest"
+      - "--cdp-endpoint"
+      - "http://localhost:9222"
+    timeout: 120
