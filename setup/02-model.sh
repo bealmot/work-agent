@@ -7,7 +7,7 @@ LMS="$HOME/.lmstudio/bin/lms"
 
 # Exact catalog name may drift; override with WORK_AGENT_MODEL.
 # Find candidates with: lms get qwen3.6 (interactive search)
-MODEL="${WORK_AGENT_MODEL:-qwen3.6-35b-a3b-mlx}"
+MODEL="${WORK_AGENT_MODEL:-qwen/qwen3.6-35b-a3b}"
 
 echo "==> Server"
 "$LMS" server start || true   # no-op if already running
