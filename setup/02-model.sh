@@ -19,7 +19,11 @@ echo "==> Model download (skips if cached)"
 }
 
 echo "==> Load with 32k context"
-"$LMS" load "$MODEL" --context-length 32768 --yes
+if "$LMS" ps 2>/dev/null | grep -qi "$MODEL"; then
+  echo "    already loaded"
+else
+  "$LMS" load "$MODEL" --context-length 32768 --yes
+fi
 
 echo "==> Verify endpoint"
 curl -sf http://localhost:1234/v1/models | grep -qi "qwen" \
