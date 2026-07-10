@@ -18,11 +18,11 @@ echo "==> Model download (skips if cached)"
   exit 1
 }
 
-echo "==> Load with 32k context"
+echo "==> Load with 64k context (Hermes requires >= 64k)"
 if "$LMS" ps 2>/dev/null | grep -qiF "$MODEL"; then
   echo "    already loaded"
 else
-  "$LMS" load "$MODEL" --context-length 32768 --yes
+  "$LMS" load "$MODEL" --context-length 65536 --yes
 fi
 
 echo "==> Verify endpoint"

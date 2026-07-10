@@ -10,12 +10,12 @@ client request inherits them.
 | Temperature | 0.7 | Enough variance to escape action loops |
 | Min-P | 0.05 | Cuts the degenerate tail without killing diversity |
 | Repeat penalty | 1.05 | Mild — discourages literal action repetition |
-| Context length | 32768 | Agent loops need room; below ~16k Hermes compresses constantly |
+| Context length | 65536 | Hermes requires at least 64k; agent loops need the room anyway |
 
 ## App settings
 | Setting | Value | Why |
 |---------|-------|-----|
-| KV cache quantization | 8-bit | ~halves KV memory at 32k context; negligible quality loss |
+| KV cache quantization | 8-bit | ~halves KV memory — load-bearing at 64k context; negligible quality loss |
 | Context overflow | Truncate middle | Keeps system prompt + recent turns; prevents silent context-death stalls |
 | Keep model loaded | On | Avoids reload latency between tasks |
 

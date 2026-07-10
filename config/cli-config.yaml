@@ -6,7 +6,7 @@ model:
   default: "qwen/qwen3.6-35b-a3b"     # must match the id in `lms ps`
   provider: "lmstudio"                 # alias for custom OpenAI-compatible
   base_url: "http://localhost:1234/v1"
-  context_length: 32768                # match the lms load --context-length
+  context_length: 65536                # match the lms load --context-length; hermes floor is 64k
 
 skills:
   creation_nudge_interval: 15
