@@ -18,6 +18,14 @@ skills:
 agent:
   max_turns: 60
 
+# OS-level GUI control via cua-driver (background: does not move your cursor
+# or steal focus). Install with: bash setup/04-computer-use.sh
+tools:
+  - computer_use
+
+computer_use:
+  cua_telemetry: false   # Hermes' default; pinned here so it stays explicit
+
 mcp_servers:
   playwright:
     command: npx
