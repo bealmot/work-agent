@@ -18,7 +18,8 @@ a git-ignored `local/` directory and is never committed here.
 | Component | Role |
 |-----------|------|
 | [LM Studio](https://lmstudio.ai) | Local inference server (OpenAI-compatible, chat templates, tool-call parsing, KV-cache quant) |
-| Qwen3.6-35B-A3B 4-bit MLX | The model — MoE, fast per-step latency in long agent loops |
+| Qwen3.6-35B-A3B GGUF (Q4_K_M) + mmproj | The model — MoE, fast per-step latency in long agent loops. GGUF/llama.cpp, **not** MLX (see `setup/02-model.sh` for why) |
 | [Hermes CLI](https://github.com/NousResearch/hermes-agent) | Agent harness — skills, memory, subagents; both coding and operating |
 | [Playwright MCP](https://github.com/microsoft/playwright-mcp) | DOM/accessibility-tree browser control via CDP against the real browser profile |
 | `cliclick` | OS-level cursor fallback for sites that reject synthetic input |
+| [cua-driver](https://github.com/trycua/cua) via `hermes computer_use` | Background OS-level screen control for DOM-less targets — native apps, canvas UIs. Does not move your cursor or steal focus |

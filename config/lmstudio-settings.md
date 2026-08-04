@@ -15,9 +15,28 @@ client request inherits them.
 ## App settings
 | Setting | Value | Why |
 |---------|-------|-----|
-| KV cache quantization | **Off for qwen3.6-35b-a3b** | The model is vision-capable and loads via mlx-vlm, which rejects KV quant ("batched vision path does not support kv cache quantization"). Its A3B MoE KV is small enough that 64k fits unquantized on 48 GB. Enable 8-bit only for text-only models. |
+| KV cache quantization | **8-bit (on)** | The old "off" rule was mlx-vlm-only — that runtime rejected KV quant on its batched vision path. We now run the GGUF/llama.cpp build (see `setup/02-model.sh`), which supports it. Worth having back: screenshot-driven agent loops fill 64k fast. |
 | Context overflow | Truncate middle | Keeps system prompt + recent turns; prevents silent context-death stalls |
 | Keep model loaded | On | Avoids reload latency between tasks |
+
+> **Per-model settings do not follow across formats.** They attach to the
+> format on disk, so the GGUF entry starts at LM Studio's stock defaults even
+> if you tuned the MLX copy. Re-apply the Inference table above on the GGUF
+> entry.
+
+## Vision (required for computer use)
+Confirm the model shows a **Vision** badge under My Models. llama.cpp only
+accepts image input when a multimodal projector (`mmproj`) is paired with the
+weights; if LM Studio didn't pair one, the badge is absent and computer use
+silently degrades to accessibility-tree-only. `setup/03-verify.sh` probes this
+directly with a 1x1 PNG — trust the probe over the badge.
+
+Fallback if LM Studio won't pair an mmproj:
+
+    llama-server -m <model>.gguf --mmproj <mmproj>.gguf --jinja -c 65536
+
+`--jinja` is required in either path; without it the Qwen3.6 chat template
+isn't applied and the model emits malformed turns.
 
 ## Verification
 `setup/03-verify.sh` exercises the endpoint including a tool-call
