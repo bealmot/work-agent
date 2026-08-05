@@ -42,7 +42,17 @@ agent:
 # server and restore the two-line tools/computer_use block.
 mcp_servers:
   cua:
-    command: cua-driver
+    # Not `cua-driver mcp` directly: the shim proxies it and clamps window
+    # reads before they reach the driver. Asking the model to pass limits was
+    # tried and does not hold -- with the caps documented in browser-ops AND
+    # the cua-driver skill pack loaded, a 4-step Zendesk task still built a
+    # ~56,800-token prompt (2026-08-05). Multi-step tasks accumulate every
+    # tool result in history, so an unbounded read is paid once per step.
+    #
+    # Tune via env: CUA_SHIM_MAX_ELEMENTS, CUA_SHIM_MAX_DEPTH,
+    # CUA_SHIM_ALLOW_SCREENSHOT. To bypass, point command back at cua-driver
+    # with args ["mcp"].
+    command: python3
     args:
-      - "mcp"
+      - "__HOME__/work-agent/scripts/cua-mcp-shim.py"
     timeout: 120
