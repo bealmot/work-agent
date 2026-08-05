@@ -7,7 +7,12 @@
 # a machine with no clipboard is how typos get in, so it is generated.
 set -euo pipefail
 
-SRC="$(cd "$(dirname "$0")/.." && pwd)/config/cli-config.yaml"
+# Resolve the repo from this script's own location. Do NOT assume ~/work-agent:
+# the clone can live anywhere (it was at ~/Projects/work-agent on the work M4),
+# and a wrong path here makes the MCP server fail to spawn -- which Hermes
+# reports by silently having no tools, not by erroring.
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="$REPO/config/cli-config.yaml"
 DEST_DIR="$HOME/.hermes"
 DEST="$DEST_DIR/cli-config.yaml"
 
@@ -30,12 +35,23 @@ fi
 PYBIN="$(command -v python3 || true)"
 [ -n "$PYBIN" ] || { echo "ERROR: python3 not found on PATH" >&2; exit 1; }
 
-sed -e "s|__HOME__|$HOME|g" -e "s|__PYTHON__|$PYBIN|g" "$SRC" > "$DEST"
+sed -e "s|__REPO__|$REPO|g" -e "s|__HOME__|$HOME|g" -e "s|__PYTHON__|$PYBIN|g" \
+    "$SRC" > "$DEST"
 
-if grep -qE "__HOME__|__PYTHON__" "$DEST"; then
+if grep -qE "__HOME__|__PYTHON__|__REPO__" "$DEST"; then
   echo "ERROR: placeholder substitution failed — $DEST still has placeholders" >&2
   exit 1
 fi
+
+# Verify every path the config names actually exists. A missing MCP command is
+# the worst failure mode here: Hermes starts fine and simply has no tools.
+MISSING=0
+for p in "$REPO/scripts/cua-mcp-shim.py" "$REPO/skills" "$PYBIN"; do
+  [ -e "$p" ] || { echo "ERROR: config references a missing path: $p" >&2; MISSING=1; }
+done
+[ "$MISSING" -eq 0 ] || exit 1
+
+echo "==> Repo:        $REPO"
 echo "==> Interpreter: $PYBIN"
 
 # cua-driver ships its own version-matched skill pack, but Hermes is NOT in

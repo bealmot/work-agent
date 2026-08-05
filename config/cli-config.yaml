@@ -15,7 +15,7 @@ skills:
   # Read-only external skills from the cloned repo; adjust path if cloned
   # elsewhere. Hermes-created skills still write to ~/.hermes/skills/.
   external_dirs:
-    - __HOME__/work-agent/skills
+    - __REPO__/skills
     # cua-driver's own version-matched skill pack is appended here
     # automatically by scripts/install-hermes-config.sh, which asks the driver
     # for its real path (`cua-driver skills path`). Hermes is NOT in the
@@ -58,5 +58,5 @@ mcp_servers:
     # the app -- leaving Hermes running with no cua tools and no error.
     command: __PYTHON__
     args:
-      - "__HOME__/work-agent/scripts/cua-mcp-shim.py"
+      - "__REPO__/scripts/cua-mcp-shim.py"
     timeout: 120
