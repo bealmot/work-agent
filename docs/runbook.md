@@ -25,8 +25,11 @@ Each phase gates the next. Do not skip verification steps.
       comes up healthy. Override the repo with `WORK_AGENT_MODEL` if needed.
 - [ ] Leave `bash scripts/serve.sh` running in its own terminal. All tuning
       lives in its flags — read `config/llama-server.md` before changing any.
-- [ ] Copy `config/cli-config.yaml` to `~/.hermes/cli-config.yaml` (merge if
-      you already have one; `base_url` must be `http://localhost:8080/v1`)
+- [ ] `bash scripts/install-hermes-config.sh` — renders
+      `config/cli-config.yaml` into `~/.hermes/cli-config.yaml` with absolute
+      paths substituted, and backs up any existing config. Do not hand-copy:
+      the Playwright profile path must be absolute and MCP args get no tilde
+      or variable expansion
 - [ ] `bash setup/03-verify.sh` → all PASS except possibly "chrome CDP"
 - [ ] **Gate:** the `system-only prompt` check must PASS. It is the B-probe —
       if it fails you are still on the MLX build and hit the mlx-vlm jinja bug
@@ -42,18 +45,28 @@ Each phase gates the next. Do not skip verification steps.
       other multi-step task; the gate is about sustained tool-calling, not pcaps.
 
 ## Phase 2 — Browser attach
-- [ ] Try first: quit Chrome fully, run `bash scripts/chrome-debug.sh`, log into your work tools as normal. This attaches to your real profile via CDP, but on Chrome 136+ the default profile typically refuses `--remote-debugging-port` (some managed/older installs still allow it, which is why it's worth trying first).
-- [ ] Start `hermes`; ask it to open your ticket queue and read one ticket title back
+The default config drives the **installed Chrome against a dedicated profile**
+(`~/.work-agent-profile`). Playwright launches it; there is nothing to start
+by hand and no debug port involved.
+
+- [ ] Confirm `scripts/install-hermes-config.sh` has been run (Phase 1) — it
+      writes the absolute profile path, which MCP args cannot expand
+- [ ] Start `hermes`; ask it to open your ticket queue
+- [ ] Log into your work tools **once** in the browser window it opens. The
+      profile persists from then on
+- [ ] Ask it to read one ticket title back
 - [ ] **Gate:** Hermes navigates and reads Zendesk in your logged-in session
-- [ ] **Expected path on current Chrome (136+):** if the CDP attach is refused, fall back to a dedicated persistent Playwright profile — remove `--cdp-endpoint` from the Hermes config so Playwright MCP launches its own browser; log into your work tools once in that browser and state persists from then on.
-- [ ] If SSO/conditional-access rejects Playwright's bundled Chromium as an
-      unmanaged browser, drive the installed Chrome instead: replace
-      `--cdp-endpoint http://localhost:9222` in the Hermes config with
-      `--browser chrome --user-data-dir /Users/<you>/.work-agent-profile`
-      (absolute path — MCP args get no tilde expansion).
-      **Confirmed working path (2026-07-10):** CDP attach failed as expected on
-      current Chrome; installed-Chrome + dedicated profile passed SSO and the
-      Phase 2 gate first try. Skip straight here on Chrome 136+.
+
+### Why not CDP against your real profile
+Chrome 136+ refuses `--remote-debugging-port` on the default user-data-dir as
+a security change, and managed/corporate policy may strip the flag outright.
+Confirmed failing here twice (2026-07-10, 2026-08-05) — `scripts/chrome-debug.sh`
+remains only for installs where policy still permits it.
+
+### Why not Playwright's bundled Chromium
+SSO/conditional-access commonly rejects it as an unmanaged browser. `--browser
+chrome` uses the real installed Chrome, which is what passed SSO first try on
+2026-07-10.
 
 ## Phase 3 — Per-site probe
 - [ ] `mkdir -p local && cp config/sites.yaml.example local/sites.yaml`

@@ -34,6 +34,30 @@ mcp_servers:
     args:
       - "-y"
       - "@playwright/mcp@0.0.32"
-      - "--cdp-endpoint"
-      - "http://localhost:9222"
+      # Dedicated persistent profile driving the INSTALLED Chrome.
+      #
+      # Not CDP-against-your-real-profile: Chrome 136+ refuses
+      # --remote-debugging-port on the default user-data-dir as a security
+      # change, and managed/corporate policy may strip the flag outright.
+      # Confirmed failing on this machine 2026-08-05; the profile path below
+      # was confirmed working (SSO passed first try) 2026-07-10.
+      #
+      # Not Playwright's bundled Chromium either: SSO/conditional-access
+      # commonly rejects it as an unmanaged browser. --browser chrome uses
+      # the real installed Chrome with a separate profile directory.
+      #
+      # Log into your work tools once in this profile; state persists after.
+      #
+      # __HOME__ is substituted by scripts/install-hermes-config.sh.
+      # MCP args get NO tilde expansion — this must be an absolute path.
+      - "--browser"
+      - "chrome"
+      - "--user-data-dir"
+      - "__HOME__/.work-agent-profile"
     timeout: 120
+
+    # Legacy alternative — attach to a CDP endpoint started by
+    # scripts/chrome-debug.sh. Only works where policy still permits
+    # --remote-debugging-port. Swap the four args above for:
+    #   - "--cdp-endpoint"
+    #   - "http://localhost:9222"

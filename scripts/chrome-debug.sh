@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Legacy: CDP attach. Chrome 136+ refuses --remote-debugging-port on the
+# default profile and managed policy may strip it; the default config uses a
+# dedicated Playwright profile instead. Kept for installs that still allow CDP.
 # Launch Chrome with CDP enabled on the user's real profile.
 # Playwright MCP attaches to this via --cdp-endpoint http://localhost:9222.
 set -euo pipefail

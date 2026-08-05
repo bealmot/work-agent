@@ -8,8 +8,14 @@ description: Operate browser-based work tools through layered automation — DOM
 ## Before acting
 1. Read `local/sites.yaml`. Find the entry whose `host` matches the target.
    No entry → treat as layer 1 and run the **probe procedure** below first.
-2. Confirm Chrome CDP is up (the playwright MCP tools respond). If not,
-   tell the user to run `scripts/chrome-debug.sh` and stop.
+2. Confirm the Playwright MCP tools respond. The browser is the installed
+   Chrome running against a dedicated profile (`~/.work-agent-profile`);
+   Playwright launches it itself, so there is nothing to start by hand.
+   If a tool call reports no browser, say so and stop — do not try to
+   attach to a CDP endpoint, and do not fall back to bundled Chromium.
+3. If a work tool shows a login page, the profile has not been signed in
+   yet. Stop and ask the user to log in once in that browser window; the
+   session persists afterwards. Never enter credentials yourself.
 
 ## Layer 1 — DOM in, DOM out (default)
 - Perceive with the page snapshot (accessibility tree), never screenshots.
