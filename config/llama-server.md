@@ -128,6 +128,25 @@ working.
 keeping images small enough that you never approach the limit — which is the
 same fix as everything else on this page.
 
+## Restarting
+
+`scripts/restart.sh` stops whatever holds the port and relaunches with the env
+you pass — the A/B loop:
+
+    bash scripts/restart.sh                      # baseline
+    WORK_AGENT_SPEC=off  bash scripts/restart.sh # isolate MTP
+    WORK_AGENT_THINK=on  bash scripts/restart.sh # isolate thinking cost
+    WORK_AGENT_KV=q8_0   bash scripts/restart.sh # confirm the #8918 penalty
+
+Check the startup banner each time: it prints `kv:`, `spec:` and the image cap,
+so you can confirm the variant took rather than trusting what you typed.
+
+SIGTERM is not instant — ~20 GB to unmap and a Metal context to tear down, and
+the process may sit in a GPU wait. The script waits 30s, then escalates to
+SIGKILL. If `kill <pid>` seemed not to work by hand, that was probably either
+this delay or a *second* llama-server: killing one leaves the other, and lsof
+still shows a listener.
+
 ## Verifying
 
 `setup/03-verify.sh` probes the endpoint, tool-calling, the system-only path
