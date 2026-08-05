@@ -25,15 +25,38 @@ echo "    ~20 GB on first run. The mmproj projector is fetched automatically"
 echo "    from the same repo when one is published."
 echo
 
+PORT="${WORK_AGENT_PORT:-8080}"
+
+# Refuse to start if something already holds the port. Without this the health
+# poll below answers against the FOREIGN server and reports success while our
+# llama-server is dead -- the exact silent-wrong-server failure this repo
+# exists to avoid. A stale qwen36-run.sh is the usual culprit.
+if lsof -i ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: something is already listening on port $PORT:" >&2
+  lsof -i ":$PORT" -sTCP:LISTEN >&2
+  echo >&2
+  echo "Stop it (kill the pid above) so there is ONE launch path, or pick" >&2
+  echo "another port:  WORK_AGENT_PORT=8081 bash setup/02-model.sh" >&2
+  exit 1
+fi
+
 # Start the server briefly to force the download, then stop it. --dry-run
 # isn't a thing; a health poll is the portable way to know it's ready.
 "$(dirname "$0")/../scripts/serve.sh" &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
-PORT="${WORK_AGENT_PORT:-8080}"
 echo "==> Waiting for the server to come up (downloads can take a while)"
 for _ in $(seq 1 600); do
+  # Liveness BEFORE the health probe: if our process died, a green /health can
+  # only be coming from something else.
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "ERROR: llama-server exited during startup. Scroll up for its output." >&2
+    echo "       Common causes: port taken (see above), or --spec-type" >&2
+    echo "       draft-mtp against weights with no MTP head — retry with" >&2
+    echo "       WORK_AGENT_SPEC=off." >&2
+    exit 1
+  fi
   if curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
     echo "OK: model loaded and serving on http://localhost:$PORT"
     echo
@@ -41,13 +64,6 @@ for _ in $(seq 1 600); do
     echo "      bash setup/03-verify.sh"
     exit 0
   fi
-  # Surface an early crash instead of polling for ten minutes against nothing.
-  kill -0 "$SERVER_PID" 2>/dev/null || {
-    echo "ERROR: llama-server exited during startup. Scroll up for its output." >&2
-    echo "       If it failed on --spec-type draft-mtp, the model has no MTP" >&2
-    echo "       head: re-run with WORK_AGENT_SPEC=off." >&2
-    exit 1
-  }
   sleep 1
 done
 
