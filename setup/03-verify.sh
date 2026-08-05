@@ -14,6 +14,27 @@ check() {  # check <label> <command...>
 
 API="http://localhost:${WORK_AGENT_PORT:-8080}"
 
+# Hard gate: if nothing answers, stop here. Every check below talks to this
+# endpoint, so a dead socket produces a wall of failures each blaming the
+# model -- broken chat template, mlx-vlm, missing mmproj -- when the real
+# cause is that no server is running. Diagnose the socket before the model.
+#
+# Note curl -s prints NOTHING on connection refused (exit 7), which is why
+# this reads as "no output" rather than as an error.
+if ! curl -s -o /dev/null "$API/health" 2>/dev/null; then
+  echo "ERROR: nothing is listening at $API" >&2
+  echo >&2
+  echo "setup/02-model.sh only PRE-DOWNLOADS the weights — it stops the" >&2
+  echo "server again when it finishes. Start the real one and leave it up:" >&2
+  echo >&2
+  echo "  terminal 1:  bash scripts/serve.sh" >&2
+  echo "  terminal 2:  bash setup/03-verify.sh" >&2
+  echo >&2
+  echo "If serve.sh IS running, confirm it is on the same port this script" >&2
+  echo "is checking (${WORK_AGENT_PORT:-8080}) — both read WORK_AGENT_PORT." >&2
+  exit 1
+fi
+
 check "cliclick installed"        command -v cliclick
 check "node installed"            command -v node
 check "uv installed"              command -v uv
@@ -29,71 +50,82 @@ else
   echo "SKIP  chrome CDP up (optional — run scripts/chrome-debug.sh later)"
 fi
 
-echo "==> Tool-call round trip"
-RESP=$(curl -sf "$API/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "any",
-    "messages": [{"role": "user", "content": "What time is it? Use the tool."}],
-    "tools": [{"type": "function", "function": {"name": "get_time",
-      "description": "Get the current time",
-      "parameters": {"type": "object", "properties": {}}}}]
-  }' 2>/dev/null)
-if echo "$RESP" | grep -q '"tool_calls"'; then
-  echo "PASS  model emits tool_calls"; PASS=$((PASS+1))
-else
-  echo "FAIL  model emits tool_calls — llama-server enables --jinja by default;"
-  echo "      if this fails the GGUF may carry a broken embedded chat template."
-  echo "      Override with --chat-template-file (see config/llama-server.md)."
-  FAIL=$((FAIL+1))
-fi
+# The model id the server actually advertises. An earlier version of this
+# script hardcoded "any" in every probe on the assumption llama-server ignores
+# the field. If it ever validates it, ALL probes fail identically and each one
+# reports its own guessed cause -- three misleading diagnoses from one upstream
+# problem. Ask the server instead of assuming.
+MODEL_ID=$(curl -s "$API/v1/models" 2>/dev/null \
+  | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+[ -n "$MODEL_ID" ] || MODEL_ID="any"
+echo "==> Using model id: $MODEL_ID"
 
-# The round trip above sends a bare user message, which passes even on the
-# broken MLX/mlx-vlm path. The actual failure mode is a SYSTEM-ONLY request:
-# mlx-vlm scans for a user message to anchor images on and rejects when there
-# is none, which is how Hermes makes some of its internal calls. This is the
-# bisect's B-probe -- it is the check that distinguishes GGUF from MLX.
-echo "==> System-only prompt (B-probe: fails on mlx-vlm, passes on llama.cpp)"
-BRESP=$(curl -sf "$API/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "any",
-    "messages": [{"role": "system", "content": "Reply with the single word: ok"}],
-    "max_tokens": 8
-  }' 2>/dev/null)
-if echo "$BRESP" | grep -q '"content"'; then
-  echo "PASS  system-only prompt renders"; PASS=$((PASS+1))
-else
-  echo "FAIL  system-only prompt — mlx-vlm jinja bug ('No user query found in messages')."
-  echo "      You are on the MLX build. Re-run setup/02-model.sh to get GGUF."
-  FAIL=$((FAIL+1))
-fi
+# probe <label> <expect-substring> <json-body> [hint...]
+#
+# Reports what the server ACTUALLY said on failure. The earlier version used
+# `curl -sf`, which discards the response body on an HTTP error -- making a
+# 400 from the server indistinguishable from a model that simply didn't
+# comply. Hints below are possibilities to check, NOT diagnoses: read the
+# server's own message first.
+probe() {
+  local label="$1" expect="$2" body="$3"; shift 3
+  local out code
+  out=$(curl -s -w $'\n%{http_code}' "$API/v1/chat/completions" \
+        -H "Content-Type: application/json" -d "$body" 2>/dev/null)
+  code=$(printf '%s' "$out" | tail -n1)
+  out=$(printf '%s' "$out" | sed '$d')
+  if printf '%s' "$out" | grep -q "$expect"; then
+    echo "PASS  $label"; PASS=$((PASS+1)); return 0
+  fi
+  echo "FAIL  $label  (HTTP ${code:-none})"
+  if [ -z "$out" ]; then
+    echo "      empty response — nothing answered at $API"
+  else
+    echo "      server said: $(printf '%s' "$out" | tr -d '\n' | head -c 300)"
+  fi
+  local h; for h in "$@"; do echo "      $h"; done
+  FAIL=$((FAIL+1)); return 1
+}
+
+echo "==> Tool-call round trip"
+probe "model emits tool_calls" '"tool_calls"' "{
+    \"model\": \"$MODEL_ID\",
+    \"messages\": [{\"role\": \"user\", \"content\": \"What time is it? Use the tool.\"}],
+    \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"get_time\",
+      \"description\": \"Get the current time\",
+      \"parameters\": {\"type\": \"object\", \"properties\": {}}}}]
+  }" \
+  "possible: GGUF carries a broken embedded chat template (--jinja is on by" \
+  "default); override with --chat-template-file. See config/llama-server.md."
+
+# A bare user message passes even on the broken MLX/mlx-vlm path. The real
+# failure mode is a SYSTEM-ONLY request: mlx-vlm scans for a user message to
+# anchor images on and rejects when there is none, which is how Hermes makes
+# some internal calls. Kept as a regression guard now that we serve GGUF.
+echo "==> System-only prompt (B-probe)"
+probe "system-only prompt renders" '"content"' "{
+    \"model\": \"$MODEL_ID\",
+    \"messages\": [{\"role\": \"system\", \"content\": \"Reply with the single word: ok\"}],
+    \"max_tokens\": 8
+  }" \
+  "possible: something other than llama-server is answering on this port —" \
+  "under llama.cpp the mlx-vlm jinja bug cannot occur. Check with: lsof -i"
 
 # Computer use sends screenshots to this model. A 1x1 transparent PNG is
 # enough to prove the multimodal path accepts image parts at all.
 echo "==> Vision path (required for computer use)"
 PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-VRESP=$(curl -sf "$API/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"model\": \"any\",
+probe "model accepts image input" '"content"' "{
+    \"model\": \"$MODEL_ID\",
     \"messages\": [{\"role\": \"user\", \"content\": [
       {\"type\": \"text\", \"text\": \"Reply with the single word: ok\"},
       {\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/png;base64,$PNG\"}}
     ]}],
     \"max_tokens\": 8
-  }" 2>/dev/null)
-if echo "$VRESP" | grep -q '"content"'; then
-  echo "PASS  model accepts image input"; PASS=$((PASS+1))
-else
-  echo "FAIL  model rejects image input — no mmproj projector loaded."
-  echo "      The -hf repo in scripts/serve.sh publishes no projector, or"
-  echo "      --mmproj-auto did not find one. Either point -mm at a projector"
-  echo "      explicitly, or fall back to the non-MTP repo which is known to"
-  echo "      ship one (see scripts/serve.sh). Without this, computer use"
-  echo "      degrades to accessibility-tree-only (mode=ax)."
-  FAIL=$((FAIL+1))
-fi
+  }" \
+  "possible: no mmproj projector loaded — the -hf repo may publish none." \
+  "Fall back to the non-MTP repo, or point -mm at one explicitly." \
+  "Without this, computer use degrades to accessibility-tree-only (mode=ax)."
 
 echo
 echo "==> $PASS passed, $FAIL failed"

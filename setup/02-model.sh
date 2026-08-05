@@ -69,10 +69,13 @@ for _ in $(seq 1 600); do
     exit 1
   fi
   if curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
-    echo "OK: model loaded and serving on http://localhost:$PORT"
+    echo "OK: weights are cached and the model loads cleanly."
     echo
-    echo "Next: leave scripts/serve.sh running in its own terminal, then"
-    echo "      bash setup/03-verify.sh"
+    echo "  ** This script now STOPS the server again — it only pre-fetches. **"
+    echo "  ** Nothing is serving after this exits. Start it yourself:       **"
+    echo
+    echo "      terminal 1:  bash scripts/serve.sh      (leave it running)"
+    echo "      terminal 2:  bash setup/03-verify.sh"
     exit 0
   fi
   sleep 1
