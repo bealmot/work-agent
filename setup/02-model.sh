@@ -31,12 +31,23 @@ PORT="${WORK_AGENT_PORT:-8080}"
 # poll below answers against the FOREIGN server and reports success while our
 # llama-server is dead -- the exact silent-wrong-server failure this repo
 # exists to avoid. A stale qwen36-run.sh is the usual culprit.
-if lsof -i ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "ERROR: something is already listening on port $PORT:" >&2
-  lsof -i ":$PORT" -sTCP:LISTEN >&2
+#
+# The test is bash's /dev/tcp rather than lsof, for two reasons: it needs no
+# external binary (so the guard cannot silently pass because a tool is
+# missing), and it sees listeners owned by OTHER users, which lsof without
+# sudo does not. lsof is used only to attribute the port, never to decide.
+if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
+  echo "ERROR: something is already listening on port $PORT." >&2
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i ":$PORT" -sTCP:LISTEN >&2 2>/dev/null \
+      || echo "       lsof cannot see it — likely another user's process." >&2
+    echo "       If nothing is listed above, try: sudo lsof -i :$PORT" >&2
+  else
+    echo "       (lsof unavailable — cannot identify the process)" >&2
+  fi
   echo >&2
-  echo "Stop it (kill the pid above) so there is ONE launch path, or pick" >&2
-  echo "another port:  WORK_AGENT_PORT=8081 bash setup/02-model.sh" >&2
+  echo "Stop it so there is ONE launch path, or pick another port:" >&2
+  echo "  WORK_AGENT_PORT=8081 bash setup/02-model.sh" >&2
   exit 1
 fi
 
