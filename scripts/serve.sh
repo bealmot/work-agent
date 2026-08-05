@@ -47,6 +47,19 @@ IMG_MAX_TOKENS="${WORK_AGENT_IMG_MAX_TOKENS:-1024}"
 #   WORK_AGENT_KV=q8_0 scripts/serve.sh
 KV_TYPE="${WORK_AGENT_KV:-f16}"
 
+# Prompt-processing (prefill) throughput. -b is the logical batch; -ub is the
+# physical micro-batch -- how many tokens the GPU actually chews per pass, and
+# the direct lever on prefill speed. Upstream defaults are 2048 / 512; kept
+# here so raising them is a one-line A/B rather than a rebuild:
+#
+#   WORK_AGENT_UBATCH=1024 bash scripts/restart.sh
+#
+# Larger micro-batches cost memory. There is headroom on 48 GB next to ~20 GB
+# of weights, but raise it deliberately and measure -- an unmeasured "obvious"
+# improvement is how the q8_0 KV regression got in.
+BATCH="${WORK_AGENT_BATCH:-2048}"
+UBATCH="${WORK_AGENT_UBATCH:-512}"
+
 # Thinking mode. Qwen3.6 has thinking and non-thinking modes in one model; if
 # thinking is on, it emits a reasoning block BEFORE every action. In a
 # computer-use loop that is hundreds of wasted tokens per step, on the
@@ -69,6 +82,7 @@ ARGS=(
   -ngl all                      # unified memory: everything on the GPU
   -fa on                        # helps regardless; the penalty is FA + quantized KV
   -ctk "$KV_TYPE" -ctv "$KV_TYPE"
+  -b "$BATCH" -ub "$UBATCH"
   --image-max-tokens "$IMG_MAX_TOKENS"
   --cache-reuse 256             # reuse the stable system+skills prefix each turn
   --keep -1                     # pin the initial prompt; see note below
@@ -94,7 +108,7 @@ fi
 
 echo "==> llama-server on :$PORT"
 echo "    model: $MODEL"
-echo "    ctx: $CTX  kv: $KV_TYPE  image-max-tokens: $IMG_MAX_TOKENS  spec: ${WORK_AGENT_SPEC:-on}"
+echo "    ctx: $CTX  kv: $KV_TYPE  batch: $BATCH/$UBATCH  spec: ${WORK_AGENT_SPEC:-on}  think: $THINK"
 echo "    Watch the startup log for: all layers offloaded to GPU, and (if spec"
 echo "    is on) a draft acceptance rate once generation starts. No acceptance"
 echo "    stats at all means draft-mtp never engaged."

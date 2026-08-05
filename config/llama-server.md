@@ -128,6 +128,42 @@ working.
 keeping images small enough that you never approach the limit — which is the
 same fix as everything else on this page.
 
+## When prompt processing is the bottleneck
+
+Observed 2026-08-05 once decode was fixed. Prefill is what you wait for before
+the first token, so it dominates felt latency in a stepping loop.
+
+**Diagnose the prompt cache first.** The system prompt (skills) is identical
+every turn and should be reused, not re-processed. llama-server reports how
+many tokens were cached versus evaluated — if the stable prefix is being
+re-processed each turn, nothing else matters.
+
+The likely reason it would not be cached is
+[#23030](https://github.com/ggml-org/llama.cpp/issues/23030): the cache is
+dropped on truncation for this model family. Large AX-tree reads push the
+context toward its limit, truncation fires, and the cache is cleared — so
+every turn pays a full re-prefill. That makes tree scoping a *prefill* fix as
+well as a context fix, and it is the first thing to attack.
+
+**Then check what is constant per turn.** Every loaded skill is prefill cost
+on every request. The cua-driver pack is the full tool reference and is heavy;
+its own maintainers describe it as too heavy to load every time. If it is
+always resident, that is a fixed tax on each turn — worth loading on demand
+rather than always, if Hermes allows it.
+
+**Then the flags.** `-ub` (micro-batch) is how many tokens the GPU processes
+per pass and is the direct prefill lever; `-b` is the logical batch above it.
+Upstream defaults are 2048 / 512:
+
+    WORK_AGENT_UBATCH=1024 bash scripts/restart.sh
+    WORK_AGENT_UBATCH=2048 bash scripts/restart.sh
+
+Larger micro-batches cost memory, so measure rather than assuming bigger wins.
+
+Order of attack: prompt-cache hit rate → per-turn constant size (skills, AX
+tree scope) → `-ub`. The first two change how many tokens you prefill; the
+flag only changes how fast you prefill them.
+
 ## Restarting
 
 `scripts/restart.sh` stops whatever holds the port and relaunches with the env
