@@ -126,9 +126,70 @@ def rewrite(line):
     return json.dumps(msg, separators=(",", ":")) + "\n"
 
 
+def filter_tools(msg):
+    """Trim the advertised tool list, and always report its cost.
+
+    Tool schemas are injected into EVERY request, so the full surface is a
+    fixed per-turn tax. Measured on the work M4 2026-08-05: a bare
+    list_windows call -- four lines of output -- rode on a 29,140-token
+    prompt. That floor is paid whether or not a tool is used.
+
+    Filtering is opt-in (CUA_SHIM_TOOLS) because dropping a tool the agent
+    needs breaks it silently. The per-tool cost report is always printed so
+    the allowlist can be chosen from measurements rather than guesses.
+    """
+    result = msg.get("result")
+    if not isinstance(result, dict):
+        return msg
+    tools = result.get("tools")
+    if not isinstance(tools, list):
+        return msg
+
+    # ~4 chars/token is close enough to rank tools by cost.
+    def cost(t):
+        return len(json.dumps(t)) // 4
+
+    total = sum(cost(t) for t in tools)
+    log(f"tools/list: {len(tools)} tools, ~{total} tokens of schema per request")
+    for t in sorted(tools, key=cost, reverse=True)[:10]:
+        log(f"    ~{cost(t):5d} tok  {t.get('name','?')}")
+    if len(tools) > 10:
+        log(f"    ... {len(tools)-10} more; set CUA_SHIM_TOOLS to filter")
+
+    keep = os.environ.get("CUA_SHIM_TOOLS")
+    if not keep:
+        return msg
+
+    wanted = {n.strip() for n in keep.split(",") if n.strip()}
+    kept = [t for t in tools if t.get("name") in wanted]
+    missing = wanted - {t.get("name") for t in tools}
+    if missing:
+        # Loud: a typo here silently removes a capability.
+        log(f"WARNING: requested tools not advertised: {sorted(missing)}")
+    if not kept:
+        log("WARNING: filter matched nothing — passing the full list through")
+        return msg
+
+    result["tools"] = kept
+    log(f"filtered to {len(kept)} tools, ~{sum(cost(t) for t in kept)} tokens "
+        f"(saved ~{total - sum(cost(t) for t in kept)})")
+    return msg
+
+
 def pump_out(child):
-    """Driver -> client, verbatim."""
+    """Driver -> client. Verbatim except for tools/list, which is measured and
+    optionally trimmed."""
     for line in child.stdout:
+        try:
+            msg = json.loads(line)
+        except (ValueError, TypeError):
+            sys.stdout.buffer.write(line)
+            sys.stdout.buffer.flush()
+            continue
+        if isinstance(msg, dict) and isinstance(msg.get("result"), dict) \
+                and "tools" in msg["result"]:
+            msg = filter_tools(msg)
+            line = (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
         sys.stdout.buffer.write(line)
         sys.stdout.buffer.flush()
 
