@@ -55,17 +55,44 @@ Actuation is always element-indexed. Perception escalates only as needed:
    repeated labels `element_index` cannot disambiguate, or the tree visibly
    disagreeing with the screen. A hunch is not a signal.
 
-Two standing cost rules, whatever the current parameter names are:
-
-- **Do not take screenshots by default.** Screenshot capture has historically
-  been opt-*out* (`include_screenshot` defaults to true), so a read that looks
-  text-only can be shipping a full image. Verify against the pack and turn it
-  off explicitly.
-- **Bound the tree walk.** Element/depth caps limit what is actually walked
-  and are the real payload control. Text-filtering options may only trim the
-  rendered output, which focuses attention without reducing size.
-
 Record each site's needed layer in `local/sites.yaml`.
+
+### Required arguments for every window read — not advice
+
+A `get_window_state` call **must** carry all four of these. A call without
+them is a defect, not a slower option:
+
+    include_screenshot: false     # defaults to TRUE — omitting it ships an image
+    max_elements: 300             # default is 2000
+    max_depth: 10                 # default is 25
+    query: "<what you are looking for>"
+
+Raise a cap only after a bounded read has actually come back insufficient, and
+raise it once — 300 → 600, not 300 → 2000. Never call with defaults "just to
+see the page."
+
+**Why this is a hard rule.** Measured on this machine, 2026-08-05: a default
+read produced a **51,700-token** prompt that took ~140 s to process before the
+model emitted a single token, and consumed 79% of the context window in one
+turn. The same server processes a 2,111-token prompt in 4 s. The parameters
+are the whole difference.
+
+Prefill also degrades superlinearly — throughput fell from 524 to 372 tok/s
+across that one prompt as attention cost grew — so an oversized read is
+punished worse than its token count suggests.
+
+Caching cannot rescue this: a freshly serialized tree is new tokens every
+turn, and new tokens must be processed regardless of what is cached.
+
+### Reading the tree efficiently
+
+1. Start with `query` plus tight caps. Most steps need one region, not a page.
+2. Check `element_count` against `filtered_element_count` in the response to
+   see what you actually pulled.
+3. If the answer is not there, narrow the `query` before widening the caps —
+   a better query is cheap, a bigger walk is not.
+4. Never re-read the whole window to confirm a single change. Re-read the
+   region you acted on.
 
 ## Observation discipline
 
@@ -125,6 +152,10 @@ AX tree pierces both, because accessibility is computed over the flat tree.
 - **Never build a theory on an empty result.** Prove the channel first. A
   corrupt observation produces confident, coherent, wrong conclusions, and no
   amount of careful reasoning downstream recovers from it.
+- **Never read a window with default limits.** `include_screenshot: false`,
+  `max_elements`, `max_depth` and `query` are required on every call. An
+  unbounded read costs ~140 s and 79% of the context window; a bounded one
+  costs ~4 s.
 
 ## Hard boundaries
 
