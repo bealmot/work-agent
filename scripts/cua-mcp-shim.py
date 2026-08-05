@@ -69,10 +69,34 @@ DRIVER = find_driver()
 WINDOW_READS = ("get_window_state", "get_browser_state")
 
 
+# Where a stdio MCP server's stderr ends up is the CLIENT's choice: inherited
+# to a terminal, captured to a log, or discarded. The Hermes desktop app shows
+# none of it. So log to a file as well -- a diagnostic you cannot read is not
+# a diagnostic, and this session lost hours to exactly that.
+LOGFILE = os.environ.get(
+    "CUA_SHIM_LOG", os.path.expanduser("~/.hermes/cua-shim.log")
+)
+
+
 def log(msg):
-    if not QUIET:
-        # stderr only: stdout is the JSON-RPC transport and must stay clean.
-        print(f"[cua-shim] {msg}", file=sys.stderr, flush=True)
+    if QUIET:
+        return
+    line = f"[cua-shim] {msg}"
+    # stderr never carries protocol: stdout is the transport and must stay clean.
+    print(line, file=sys.stderr, flush=True)
+    if not LOGFILE:
+        return
+    try:
+        os.makedirs(os.path.dirname(LOGFILE), exist_ok=True)
+        with open(LOGFILE, "a") as fh:
+            fh.write(f"{_stamp()} {line}\n")
+    except OSError:
+        pass  # logging must never take the proxy down with it
+
+
+def _stamp():
+    from datetime import datetime
+    return datetime.now().strftime("%H:%M:%S")
 
 
 def clamp(args):
