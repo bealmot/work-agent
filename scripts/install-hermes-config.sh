@@ -54,6 +54,37 @@ done
 echo "==> Repo:        $REPO"
 echo "==> Interpreter: $PYBIN"
 
+# MCP servers live in ~/.hermes/config.yaml, NOT in cli-config.yaml. An
+# mcp_servers block in the wrong file is ignored without comment -- the cua
+# server looked configured for hours while never spawning, presenting as
+# "the tools just don't support these parameters".
+#
+# `hermes mcp add` writes the correct file and merges, so it is used instead
+# of hand-editing YAML we would be guessing at.
+SHIM="$REPO/scripts/cua-mcp-shim.py"
+MANUAL="hermes mcp add cua --command $PYBIN --args $SHIM"
+echo "==> Registering the cua MCP server"
+if ! command -v hermes >/dev/null 2>&1; then
+  echo "    WARNING: hermes not on PATH. Register manually:" >&2
+  echo "      $MANUAL" >&2
+else
+  # Capture rather than pipe: a pipeline reports sed's exit status, not the
+  # command's, so failures would read as successes.
+  if OUT="$(hermes mcp add cua --command "$PYBIN" --args "$SHIM" 2>&1)"; then
+    [ -n "$OUT" ] && printf '    %s\n' "$OUT"
+    echo "    registered"
+  else
+    [ -n "$OUT" ] && printf '    %s\n' "$OUT" >&2
+    echo "    NOTE: add failed — it may already exist. Verify with:" >&2
+    echo "      hermes mcp test cua" >&2
+    echo "    Or re-add manually:" >&2
+    echo "      $MANUAL" >&2
+  fi
+fi
+echo
+echo "    Verify with:  hermes mcp test cua"
+echo "    Shim log:     ~/.hermes/cua-shim.log"
+
 # cua-driver ships its own version-matched skill pack, but Hermes is NOT in
 # the driver's auto-detect list (Claude Code, Codex, OpenClaw, OpenCode), so
 # nothing links it in for us. Ask the driver where the pack actually lives

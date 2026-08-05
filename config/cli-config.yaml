@@ -40,23 +40,10 @@ agent:
 # Deliberately NOT also setting `tools: [computer_use]`: both paths drive the
 # same daemon, and two owners is a fight worth avoiding. To go back, drop this
 # server and restore the two-line tools/computer_use block.
-mcp_servers:
-  cua:
-    # Not `cua-driver mcp` directly: the shim proxies it and clamps window
-    # reads before they reach the driver. Asking the model to pass limits was
-    # tried and does not hold -- with the caps documented in browser-ops AND
-    # the cua-driver skill pack loaded, a 4-step Zendesk task still built a
-    # ~56,800-token prompt (2026-08-05). Multi-step tasks accumulate every
-    # tool result in history, so an unbounded read is paid once per step.
-    #
-    # Tune via env: CUA_SHIM_MAX_ELEMENTS, CUA_SHIM_MAX_DEPTH,
-    # CUA_SHIM_ALLOW_SCREENSHOT. To bypass, point command back at cua-driver
-    # with args ["mcp"].
-    # Absolute interpreter path, substituted by install-hermes-config.sh.
-    # GUI-launched apps (Hermes desktop) do NOT inherit the shell PATH, so a
-    # bare "python3" works from a terminal and silently fails to spawn from
-    # the app -- leaving Hermes running with no cua tools and no error.
-    command: __PYTHON__
-    args:
-      - "__REPO__/scripts/cua-mcp-shim.py"
-    timeout: 120
+
+# NOTE: MCP servers are deliberately NOT configured here.
+# Hermes reads mcp_servers from ~/.hermes/config.yaml, a DIFFERENT file from
+# this one. An mcp_servers block in cli-config.yaml is silently ignored --
+# which is how the cua server appeared to be configured for hours while never
+# spawning. scripts/install-hermes-config.sh registers it via `hermes mcp add`,
+# which writes the right file and merges rather than clobbering.
