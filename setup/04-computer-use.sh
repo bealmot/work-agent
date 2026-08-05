@@ -36,31 +36,71 @@ echo "==> Install cua-driver"
 # place rather than launching an unmanaged profile.
 hermes computer-use install
 
-echo "==> Doctor (permissions + driver + platform matrix)"
-# Prints a per-check matrix. Grants attach to the TERMINAL APP running hermes,
-# not to hermes itself. Without them input events are silently dropped, with
-# no error raised.
+echo "==> Permissions"
+# Grant through cua-driver, NOT by adding your terminal in System Settings.
+# `permissions grant` launches CuaDriver via LaunchServices so the dialogs
+# attribute to the app itself, requests Accessibility + Screen Recording (and
+# Tahoe's direct-capture consent), then verifies live capture. The read-only
+# `permissions status` never triggers that probe, so it cannot be used to set
+# things up -- and with no daemon running it reports "unknown" rather than
+# your terminal's grants.
 #
-#   Accessibility     -- required. Every element read and every click.
-#   Automation        -- required for the DOM-via-Apple-Events path that
-#                        browser-ops Layer 2 depends on (Chrome must be
-#                        listed under the terminal app). macOS prompts for
-#                        this the first time it is used, not at install.
-#   Screen Recording  -- only needed for screenshots. The accessibility tree
-#                        works without it, and AX is the default path here,
-#                        so this is optional if you never fall to pixels.
+# Which app the grants attach to depends on who owns the runtime: `mcp
+# --direct` deliberately attributes TCC to the invoking host instead. If
+# permissions look granted but actions are silently dropped, that mismatch is
+# the first thing to check.
+if command -v cua-driver >/dev/null 2>&1; then
+  cua-driver permissions grant || {
+    echo "WARNING: permissions grant did not complete cleanly." >&2
+    echo "         Re-run it directly: cua-driver permissions grant" >&2
+  }
+else
+  echo "WARNING: cua-driver not on PATH; skipping permissions grant." >&2
+fi
+
+echo "==> Vendor skill pack"
+# Version-matched, vendor-authored guidance for the driver's own tool surface.
+# Prefer it over hand-written descriptions of the tool API -- the API moves,
+# and skills/browser-ops/SKILL.md deliberately no longer tries to document it.
+if command -v cua-driver >/dev/null 2>&1; then
+  cua-driver skills install || echo "    (skill pack install skipped)"
+  PACK="$(cua-driver skills path 2>/dev/null || true)"
+  if [ -n "$PACK" ]; then
+    echo
+    echo "    Skill pack: $PACK"
+    echo "    Hermes is NOT in the driver's auto-detect list (Claude Code,"
+    echo "    Codex, OpenClaw, OpenCode), so add that path to the"
+    echo "    skills.external_dirs list in ~/.hermes/cli-config.yaml."
+  fi
+fi
+
+echo "==> Doctor (permissions + driver + platform matrix)"
 hermes computer-use doctor || {
   echo >&2
-  echo "Doctor reported problems. Grant permissions at:" >&2
-  echo "  System Settings -> Privacy & Security -> Accessibility   (required)" >&2
-  echo "  System Settings -> Privacy & Security -> Automation      (required)" >&2
-  echo "  System Settings -> Privacy & Security -> Screen Recording (pixels only)" >&2
-  echo "Add your terminal app, then FULLY QUIT and reopen it -- macOS only" >&2
-  echo "re-reads these grants on process start -- and re-run." >&2
+  echo "Doctor reported problems. Try, in order:" >&2
+  echo "  cua-driver permissions grant     # the correct grant path" >&2
+  echo "  cua-driver doctor                # driver's own diagnostics" >&2
+  echo "After granting, FULLY QUIT and reopen the terminal -- macOS only" >&2
+  echo "re-reads grants on process start -- and re-run." >&2
   exit 1
 }
 
 cat <<'EOF'
+
+==> Browser attachment (required before the browser tools work)
+Attaching to a browser is gated behind an explicit approval. Use the
+EXISTING-PROFILE strategy -- the isolated_new / isolated_named modes spawn an
+unmanaged profile, which fails device posture on corporate tools:
+
+  cua-driver browser-approve --strategy existing_profile --pid <chrome-pid> \
+             --window-id <id> --session <session>
+
+To pre-authorize it for the daemon's lifetime instead of per-request, start
+the daemon with:
+
+  cua-driver serve --grant existing-profile
+
+Find the pid/window id with: cua-driver call list_windows
 
 OK: computer use ready.
 
