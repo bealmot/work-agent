@@ -68,17 +68,27 @@ if ! command -v hermes >/dev/null 2>&1; then
   echo "    WARNING: hermes not on PATH. Register manually:" >&2
   echo "      $MANUAL" >&2
 else
-  # Capture rather than pipe: a pipeline reports sed's exit status, not the
-  # command's, so failures would read as successes.
-  if OUT="$(hermes mcp add cua --command "$PYBIN" --args "$SHIM" 2>&1)"; then
-    [ -n "$OUT" ] && printf '    %s\n' "$OUT"
-    echo "    registered"
-  else
-    [ -n "$OUT" ] && printf '    %s\n' "$OUT" >&2
-    echo "    NOTE: add failed — it may already exist. Verify with:" >&2
-    echo "      hermes mcp test cua" >&2
-    echo "    Or re-add manually:" >&2
+  # `hermes mcp add` prompts "Server 'cua' already exists. Overwrite? [y/N]"
+  # when re-registering. Capturing stdout swallows that prompt, so it never
+  # reaches the terminal, gets no answer, defaults to No -- and still exits 0.
+  # Answer it on stdin instead of hoping.
+  #
+  # Overwriting is the intent: `hermes computer-use install` registers a `cua`
+  # server pointing straight at the driver, which bypasses the shim entirely.
+  OUT="$(printf 'y\n' | hermes mcp add cua --command "$PYBIN" --args "$SHIM" 2>&1)"
+  RC=$?
+  [ -n "$OUT" ] && printf '    %s\n' "$OUT"
+
+  # Exit code alone is not enough -- a cancelled overwrite still exits 0.
+  if [ "$RC" -ne 0 ] || printf '%s' "$OUT" | grep -qi "cancel"; then
+    echo >&2
+    echo "    WARNING: the cua server was NOT pointed at the shim." >&2
+    echo "    An existing entry (likely from 'hermes computer-use install')" >&2
+    echo "    takes precedence and bypasses it. Fix with:" >&2
+    echo "      hermes mcp remove cua   # then:" >&2
     echo "      $MANUAL" >&2
+  else
+    echo "    registered -> $SHIM"
   fi
 fi
 echo
