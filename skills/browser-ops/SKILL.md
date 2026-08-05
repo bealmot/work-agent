@@ -39,16 +39,23 @@ call otherwise grabs the screen and ships a full image you did not ask for.
 This is the single most expensive mistake available in this skill. (`capture_mode`
 is deprecated and ignored — it does not give you a text-only read.)
 
-**Always scope the tree.** Defaults are `max_elements: 2000` and
-`max_depth: 25`, which serialize far more of a page than any one step needs:
+**Always scope the tree.** Defaults walk up to `max_elements: 2000` at
+`max_depth: 25` — far more of a page than any one step needs. The two controls
+do different jobs, and the difference matters when you are fighting context:
 
-- `query` — case-insensitive filter returning matching actionable rows plus
-  their actionable ancestors. It does **not** renumber `element_index`, so
-  filtering is free of consistency risk. Use it whenever you know roughly what
-  you are looking for ("Submit", "ticket", "assignee").
-- `max_elements` / `max_depth` — lower them for deep or sprawling pages.
+- **`max_elements` / `max_depth` bound the AX walk itself.** These are the
+  real payload reducers. Lower them first on deep or sprawling pages.
+- **`query` trims the rendered `tree_markdown`** to matching lines plus their
+  ancestor chain (case-insensitive substring). It aids focus and readability,
+  and leaves `element_index` values unchanged so it is safe to apply freely —
+  but it is *not* primarily a size lever, since it filters the rendering
+  rather than the walk.
 
-Read `element_count` vs `filtered_element_count` to see how much you pulled.
+Read `element_count` vs `filtered_element_count` to see what you pulled.
+
+These parameters live on cua-driver's **native MCP tools**. Hermes' older
+`computer_use` wrapper does not expose them — if they are rejected as unknown,
+you are on the wrapper rather than the MCP server (see `config/cli-config.yaml`).
 
 Chrome's AX tree is sometimes sparse on first read — if it comes back thin,
 retry once before concluding anything.
