@@ -29,13 +29,31 @@ CTX="${WORK_AGENT_CTX:-65536}"
 # -- a full Retina capture is mostly wasted pixels for reading numbered marks.
 IMG_MAX_TOKENS="${WORK_AGENT_IMG_MAX_TOKENS:-1024}"
 
+# KV cache type. f16 on purpose -- do NOT set this to q8_0 without measuring.
+#
+# Quantizing the KV cache looks free (it halves the footprint) and it needs
+# flash attention to avoid dequantizing on every attention op, so "-ctk q8_0
+# -ctv q8_0 -fa on" reads as a coherent pairing. On Apple Silicon it is not:
+# Metal has no optimized quantized-KV flash-attention kernel, and the
+# combination measures ~1/3 SLOWER token generation.
+#   https://github.com/ggml-org/llama.cpp/issues/8918
+#
+# Decode here is memory-bandwidth-bound (the M4 Pro has strong GPU compute
+# relative to its ~273 GB/s), so anything adding per-token memory traffic hits
+# generation hard while barely touching prefill. Roughly 3 GB of KV is a good
+# trade for that on a 48 GB machine.
+#
+# Measure with llama-bench before changing, not from inside the agent loop:
+#   WORK_AGENT_KV=q8_0 scripts/serve.sh
+KV_TYPE="${WORK_AGENT_KV:-f16}"
+
 ARGS=(
   -hf "$MODEL"
   --port "$PORT"
   -c "$CTX"
   -ngl all                      # unified memory: everything on the GPU
-  -fa on                        # required for quantized KV below
-  -ctk q8_0 -ctv q8_0           # halves KV footprint; agent loops fill 64k fast
+  -fa on                        # helps regardless; the penalty is FA + quantized KV
+  -ctk "$KV_TYPE" -ctv "$KV_TYPE"
   --image-max-tokens "$IMG_MAX_TOKENS"
   --cache-reuse 256             # reuse the stable system+skills prefix each turn
   --keep -1                     # pin the initial prompt; see note below
@@ -56,6 +74,9 @@ ARGS=(
 
 echo "==> llama-server on :$PORT"
 echo "    model: $MODEL"
-echo "    ctx: $CTX  image-max-tokens: $IMG_MAX_TOKENS  spec: ${WORK_AGENT_SPEC:-on}"
+echo "    ctx: $CTX  kv: $KV_TYPE  image-max-tokens: $IMG_MAX_TOKENS  spec: ${WORK_AGENT_SPEC:-on}"
+echo "    Watch the startup log for: all layers offloaded to GPU, and (if spec"
+echo "    is on) a draft acceptance rate once generation starts. No acceptance"
+echo "    stats at all means draft-mtp never engaged."
 echo
 exec llama-server "${ARGS[@]}"
