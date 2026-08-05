@@ -1,70 +1,55 @@
 #!/usr/bin/env bash
-# Download (if needed), load, and serve the model via LM Studio.
+# Pre-download the model so the first agent run isn't a silent 20 GB stall,
+# then hand off to scripts/serve.sh. Idempotent: cached weights are reused.
 set -euo pipefail
 
-LMS="$HOME/.lmstudio/bin/lms"
-[ -x "$LMS" ] || { echo "ERROR: lms not found — run setup/01-install.sh first" >&2; exit 1; }
+command -v llama-server >/dev/null 2>&1 \
+  || { echo "ERROR: llama-server not found — run setup/01-install.sh first" >&2; exit 1; }
 
-# Exact catalog name may drift; override with WORK_AGENT_MODEL.
-# Find candidates with: lms get qwen3.6 (interactive search)
-MODEL="${WORK_AGENT_MODEL:-qwen/qwen3.6-35b-a3b}"
+MODEL="${WORK_AGENT_MODEL:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_M}"
 
-# GGUF (llama.cpp), NOT MLX. The MLX build of this model loads through
-# mlx-vlm, whose prompt pipeline asserts a user message exists to anchor
-# images on -- even for zero-image requests. Hermes' system-only internal
-# calls have no user message, so they fail with:
+# GGUF/llama.cpp, NOT MLX. The MLX build of this model loads through mlx-vlm,
+# whose prompt pipeline asserts a user message exists to anchor images on --
+# even for requests carrying no images. Hermes makes some internal calls with
+# a system message only, so they fail with:
 #   "Error rendering prompt with jinja template: No user query found in messages"
-# llama.cpp splices images per-message instead and handles system-only +
-# tool roles fine. Confirmed by bisect 2026-07-20 (bare user OK, system-only
-# fails). Vision survives the switch: this model ships an mmproj projector.
-QUANT="${WORK_AGENT_QUANT:-Q4_K_M}"
+# llama.cpp splices images per-message and handles system-only and tool roles
+# fine. Confirmed by bisect 2026-07-20 (bare user OK, system-only fails).
+# Under llama.cpp this is enforced by which file you download; there is no
+# runtime to pick the wrong one for you.
 
-echo "==> Server"
-"$LMS" server start || true   # no-op if already running
+echo "==> Fetching weights (cached after the first run)"
+echo "    $MODEL"
+echo "    Cache: ${LLAMA_CACHE:-~/Library/Caches/llama.cpp}"
+echo "    ~20 GB on first run. The mmproj projector is fetched automatically"
+echo "    from the same repo when one is published."
+echo
 
-echo "==> Model download (skips if cached)"
-"$LMS" get "$MODEL" --gguf --yes || {
-  echo "ERROR: '$MODEL' GGUF not found in catalog. Search with: lms get qwen3.6" >&2
-  exit 1
-}
+# Start the server briefly to force the download, then stop it. --dry-run
+# isn't a thing; a health poll is the portable way to know it's ready.
+"$(dirname "$0")/../scripts/serve.sh" &
+SERVER_PID=$!
+trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
-# Two formats of the same id on disk make `lms load <id>` ambiguous. If an
-# MLX copy is still present, loading may silently pick it and reintroduce
-# the jinja bug -- fail loud rather than guess which one got loaded.
-if "$LMS" ls 2>/dev/null | grep -iF "$MODEL" | grep -qi mlx; then
-  echo "ERROR: an MLX copy of '$MODEL' is still on disk alongside the GGUF." >&2
-  echo "       'lms load' cannot disambiguate. Remove the MLX copy first:" >&2
-  echo "         lms rm $MODEL   # select the MLX entry" >&2
-  exit 1
-fi
+PORT="${WORK_AGENT_PORT:-8080}"
+echo "==> Waiting for the server to come up (downloads can take a while)"
+for _ in $(seq 1 600); do
+  if curl -sf "http://localhost:$PORT/health" >/dev/null 2>&1; then
+    echo "OK: model loaded and serving on http://localhost:$PORT"
+    echo
+    echo "Next: leave scripts/serve.sh running in its own terminal, then"
+    echo "      bash setup/03-verify.sh"
+    exit 0
+  fi
+  # Surface an early crash instead of polling for ten minutes against nothing.
+  kill -0 "$SERVER_PID" 2>/dev/null || {
+    echo "ERROR: llama-server exited during startup. Scroll up for its output." >&2
+    echo "       If it failed on --spec-type draft-mtp, the model has no MTP" >&2
+    echo "       head: re-run with WORK_AGENT_SPEC=off." >&2
+    exit 1
+  }
+  sleep 1
+done
 
-echo "==> Load with 64k context (Hermes requires >= 64k)"
-if "$LMS" ps 2>/dev/null | grep -qiF "$MODEL"; then
-  echo "    already loaded"
-else
-  "$LMS" load "$MODEL" --context-length 65536 --yes
-fi
-
-echo "==> Verify endpoint"
-curl -sf http://localhost:1234/v1/models | grep -qiF "$MODEL" \
-  && echo "OK: model serving on http://localhost:1234/v1" \
-  || { echo "ERROR: endpoint up but model not listed" >&2; exit 1; }
-
-cat <<'EOF'
-
-==> Manual check: vision
-Computer use needs the model to accept images. llama.cpp only enables image
-input when the multimodal projector (mmproj) is loaded alongside the weights.
-
-  LM Studio -> My Models -> this model -> confirm the "Vision" badge.
-
-If the badge is absent, LM Studio did not pair an mmproj. Serve with
-standalone llama-server instead:
-
-  llama-server -m <model>.gguf --mmproj <mmproj>.gguf --jinja -c 65536
-
-(--jinja is required either way; without it the Qwen3.6 chat template is not
-applied and the model emits malformed turns.)
-
-Then: bash setup/03-verify.sh
-EOF
+echo "ERROR: server did not become healthy within 10 minutes." >&2
+exit 1

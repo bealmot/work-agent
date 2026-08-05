@@ -12,13 +12,16 @@ check() {  # check <label> <command...>
   fi
 }
 
+API="http://localhost:${WORK_AGENT_PORT:-8080}"
+
 check "cliclick installed"        command -v cliclick
 check "node installed"            command -v node
 check "uv installed"              command -v uv
 check "hermes installed"          command -v hermes
-check "lms CLI present"           test -x "$HOME/.lmstudio/bin/lms"
-check "LM Studio endpoint up"     curl -sf http://localhost:1234/v1/models
-check "model loaded"              sh -c 'curl -sf http://localhost:1234/v1/models | grep -qi qwen'
+check "llama-server installed"    command -v llama-server
+check "metal backend"             sh -c 'llama-server --version 2>&1 | grep -qi metal'
+check "llama-server up"           curl -sf "$API/health"
+check "model listed"              curl -sf "$API/v1/models"
 check "playwright mcp cached"     npx -y @playwright/mcp@0.0.32 --version
 if curl -sf http://localhost:9222/json/version >/dev/null 2>&1; then
   echo "PASS  chrome CDP up (optional)"; PASS=$((PASS+1))
@@ -27,7 +30,7 @@ else
 fi
 
 echo "==> Tool-call round trip"
-RESP=$(curl -sf http://localhost:1234/v1/chat/completions \
+RESP=$(curl -sf "$API/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "any",
@@ -39,7 +42,9 @@ RESP=$(curl -sf http://localhost:1234/v1/chat/completions \
 if echo "$RESP" | grep -q '"tool_calls"'; then
   echo "PASS  model emits tool_calls"; PASS=$((PASS+1))
 else
-  echo "FAIL  model emits tool_calls — check the prompt template (see config/lmstudio-settings.md)"
+  echo "FAIL  model emits tool_calls — llama-server enables --jinja by default;"
+  echo "      if this fails the GGUF may carry a broken embedded chat template."
+  echo "      Override with --chat-template-file (see config/llama-server.md)."
   FAIL=$((FAIL+1))
 fi
 
@@ -49,7 +54,7 @@ fi
 # is none, which is how Hermes makes some of its internal calls. This is the
 # bisect's B-probe -- it is the check that distinguishes GGUF from MLX.
 echo "==> System-only prompt (B-probe: fails on mlx-vlm, passes on llama.cpp)"
-BRESP=$(curl -sf http://localhost:1234/v1/chat/completions \
+BRESP=$(curl -sf "$API/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "any",
@@ -68,7 +73,7 @@ fi
 # enough to prove the multimodal path accepts image parts at all.
 echo "==> Vision path (required for computer use)"
 PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-VRESP=$(curl -sf http://localhost:1234/v1/chat/completions \
+VRESP=$(curl -sf "$API/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d "{
     \"model\": \"any\",
@@ -81,10 +86,12 @@ VRESP=$(curl -sf http://localhost:1234/v1/chat/completions \
 if echo "$VRESP" | grep -q '"content"'; then
   echo "PASS  model accepts image input"; PASS=$((PASS+1))
 else
-  echo "FAIL  model rejects image input — no mmproj loaded."
-  echo "      Confirm the Vision badge in LM Studio, or serve via llama-server"
-  echo "      with --mmproj (see setup/02-model.sh output). Without this,"
-  echo "      computer use degrades to accessibility-tree-only (mode=ax)."
+  echo "FAIL  model rejects image input — no mmproj projector loaded."
+  echo "      The -hf repo in scripts/serve.sh publishes no projector, or"
+  echo "      --mmproj-auto did not find one. Either point -mm at a projector"
+  echo "      explicitly, or fall back to the non-MTP repo which is known to"
+  echo "      ship one (see scripts/serve.sh). Without this, computer use"
+  echo "      degrades to accessibility-tree-only (mode=ax)."
   FAIL=$((FAIL+1))
 fi
 

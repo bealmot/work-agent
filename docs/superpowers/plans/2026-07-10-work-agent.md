@@ -1,5 +1,11 @@
 # work-agent Implementation Plan
 
+> **Historical build log (2026-07-10) — do not follow as current setup.**
+> The LM Studio serving layer described throughout was replaced by llama.cpp
+> on 2026-08-05. Current instructions: `docs/runbook.md` and
+> `config/llama-server.md`. Kept unedited as the record of how the repo
+> was built.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the public bootstrap repo (scripts, configs, skill templates) that assembles a fully local support-engineer agent stack — LM Studio + Qwen3.6-35B-A3B + Hermes CLI + layered Playwright browser control — on a 48 GB Apple Silicon work machine.

@@ -1,7 +1,8 @@
 # work-agent
 
 A fully local AI agent stack for a support-engineer workflow on Apple Silicon
-(48 GB): Hermes CLI + LM Studio + Qwen3.6-35B-A3B + DOM-based browser control.
+(48 GB): Hermes CLI + llama.cpp + Qwen3.6-35B-A3B + layered browser and
+screen control.
 
 No cloud inference. No data leaves the machine. This repo is the public
 bootstrap artifact — clone it on the target machine and follow the spec.
@@ -17,8 +18,8 @@ a git-ignored `local/` directory and is never committed here.
 
 | Component | Role |
 |-----------|------|
-| [LM Studio](https://lmstudio.ai) | Local inference server (OpenAI-compatible, chat templates, tool-call parsing, KV-cache quant) |
-| Qwen3.6-35B-A3B GGUF (Q4_K_M) + mmproj | The model — MoE, fast per-step latency in long agent loops. GGUF/llama.cpp, **not** MLX (see `setup/02-model.sh` for why) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) (`llama-server`) | Local inference server, OpenAI-compatible on `:8080`. Replaced LM Studio — every runtime choice is an explicit flag (`config/llama-server.md`) |
+| Qwen3.6-35B-A3B-MTP GGUF (Q4_K_M) + mmproj | The model — MoE, fast per-step latency in long agent loops. GGUF, **not** MLX (see `setup/02-model.sh` for why). MTP head gives self-speculative decoding |
 | [Hermes CLI](https://github.com/NousResearch/hermes-agent) | Agent harness — skills, memory, subagents; both coding and operating |
 | [Playwright MCP](https://github.com/microsoft/playwright-mcp) | DOM/accessibility-tree browser control via CDP against the real browser profile |
 | `cliclick` | OS-level cursor fallback for sites that reject synthetic input |

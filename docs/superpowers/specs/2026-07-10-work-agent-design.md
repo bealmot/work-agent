@@ -1,8 +1,27 @@
 # work-agent — Local Support-Engineer Agent Stack
 
 **Date:** 2026-07-10
-**Status:** Approved design, pre-implementation
+**Status:** Approved design, pre-implementation — **partially superseded, see below**
 **Target:** MacBook Pro M4, 48 GB unified memory, fully local inference
+
+> **Amendment 2026-08-05 — serving layer replaced.**
+> This document specifies **LM Studio on `localhost:1234`** as the inference
+> server. That is no longer the stack: it is **llama.cpp (`llama-server`) on
+> `localhost:8080`**. Rationale and flags in `config/llama-server.md`.
+>
+> Short version: LM Studio chose the runtime implicitly (MLX vs GGUF, chat
+> templates, projector pairing), and a wrong choice surfaced several layers
+> up as an unrelated error — the July 2026 `No user query found in messages`
+> outage was mlx-vlm rejecting Hermes' system-only calls, presenting as a
+> jinja template failure. llama-server makes each of those an explicit flag.
+>
+> Everything else here — the layered browser-control model, the local-only
+> constraint, the `local/` split — still holds. Layer 3 (OS-level screen
+> control via `computer_use`) was added later and is not described here; see
+> `skills/screen-ops/SKILL.md`.
+>
+> Kept as the original design record rather than rewritten, because the
+> reasoning behind the LM Studio choice is what makes the July bug legible.
 
 ## Problem
 

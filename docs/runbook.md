@@ -13,19 +13,30 @@ Each phase gates the next. Do not skip verification steps.
       downloads in the installer fail on certificate errors.
 
 ## Phase 1 — Inference stack
-- [ ] `bash setup/01-install.sh` (open LM Studio once + `lms bootstrap` if prompted, then re-run)
-- [ ] `bash setup/02-model.sh` (set `WORK_AGENT_MODEL` if the default catalog name has drifted — search with `lms get qwen3.6`)
-- [ ] Apply the GUI settings in `config/lmstudio-settings.md`
-- [ ] Copy `config/cli-config.yaml` to `~/.hermes/cli-config.yaml` (merge if you already have one; set `model.default` to the exact id shown by `lms ps`)
+> **Migrating from LM Studio?** It was removed in favour of llama.cpp
+> (rationale in `config/llama-server.md`). Uninstall the app and delete the
+> `~/.lmstudio` model cache once Phase 1 passes — leaving an MLX copy around
+> is exactly how the July 2026 jinja bug happened. The Hermes endpoint also
+> moves from `:1234` to `:8080`, so re-copy `cli-config.yaml` rather than
+> hand-editing the old one.
+
+- [ ] `bash setup/01-install.sh` (warns if the llama.cpp build lacks Metal)
+- [ ] `bash setup/02-model.sh` — pre-downloads ~20 GB and confirms the server
+      comes up healthy. Override the repo with `WORK_AGENT_MODEL` if needed.
+- [ ] Leave `bash scripts/serve.sh` running in its own terminal. All tuning
+      lives in its flags — read `config/llama-server.md` before changing any.
+- [ ] Copy `config/cli-config.yaml` to `~/.hermes/cli-config.yaml` (merge if
+      you already have one; `base_url` must be `http://localhost:8080/v1`)
 - [ ] `bash setup/03-verify.sh` → all PASS except possibly "chrome CDP"
 - [ ] **Gate:** the `system-only prompt` check must PASS. It is the B-probe —
       if it fails you are still on the MLX build and hit the mlx-vlm jinja bug
-      (`No user query found in messages`). Re-run `02-model.sh`; remove the MLX
-      copy if it complains. The plain tool-call check passes either way, so do
-      not read it as proof the stack is good.
+      (`No user query found in messages`). Under llama.cpp this should be
+      impossible — if it fires, something is still serving on `:8080`. The
+      plain tool-call check passes either way, so do not read it as proof the
+      stack is good.
 - [ ] **Gate:** the `model accepts image input` check must PASS if you intend
-      to use Phase 4b. Confirm the Vision badge (`config/lmstudio-settings.md`).
-- [ ] **Gate:** give Hermes a real multi-step coding task (e.g. "write and test a script that parses a sample pcap with tshark"). It must complete without stalling. If it stalls, tune sampling per `config/lmstudio-settings.md` before proceeding.
+      to use Phase 4b — it means the mmproj projector loaded (`config/llama-server.md`).
+- [ ] **Gate:** give Hermes a real multi-step coding task (e.g. "write and test a script that parses a sample pcap with tshark"). It must complete without stalling. If it stalls, see `config/llama-server.md` before proceeding.
       Note: `tshark` isn't installed by `01-install.sh` — Wireshark's bundle has it at
       `/Applications/Wireshark.app/Contents/MacOS/tshark` (add to PATH), or pick any
       other multi-step task; the gate is about sustained tool-calling, not pcaps.
