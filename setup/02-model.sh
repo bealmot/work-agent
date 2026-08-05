@@ -32,21 +32,25 @@ PORT="${WORK_AGENT_PORT:-8080}"
 # llama-server is dead -- the exact silent-wrong-server failure this repo
 # exists to avoid. A stale qwen36-run.sh is the usual culprit.
 #
-# The test is bash's /dev/tcp rather than lsof, for two reasons: it needs no
-# external binary (so the guard cannot silently pass because a tool is
-# missing), and it sees listeners owned by OTHER users, which lsof without
-# sudo does not. lsof is used only to attribute the port, never to decide.
-if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
-  echo "ERROR: something is already listening on port $PORT." >&2
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -i ":$PORT" -sTCP:LISTEN >&2 2>/dev/null \
-      || echo "       lsof cannot see it — likely another user's process." >&2
-    echo "       If nothing is listed above, try: sudo lsof -i :$PORT" >&2
-  else
-    echo "       (lsof unavailable — cannot identify the process)" >&2
-  fi
+# lsof, not bash's /dev/tcp. An earlier version used /dev/tcp because it needs
+# no external binary and sees listeners owned by other users. But probing a
+# port blocks forever against a listener that has stopped accepting: the
+# backlog fills and connect() has no timeout, and macOS ships no `timeout`
+# binary to bound it. A wedged server is exactly what you would be trying to
+# diagnose here, so the check must not be able to hang on it.
+#
+# lsof's blind spot -- other users' processes, without sudo -- is covered
+# downstream rather than here: if it misses a listener, serve.sh simply fails
+# to bind, and the liveness check below catches the early exit and reports it.
+# A loud late failure beats a hang.
+if command -v lsof >/dev/null 2>&1 \
+   && [ -n "$(lsof -ti ":$PORT" -sTCP:LISTEN 2>/dev/null)" ]; then
+  echo "ERROR: something is already listening on port $PORT:" >&2
+  lsof -i ":$PORT" -sTCP:LISTEN >&2
   echo >&2
-  echo "Stop it so there is ONE launch path, or pick another port:" >&2
+  echo "Stop it so there is ONE launch path:" >&2
+  echo "  bash scripts/restart.sh      # stops the holder, then serves" >&2
+  echo "or pick another port:" >&2
   echo "  WORK_AGENT_PORT=8081 bash setup/02-model.sh" >&2
   exit 1
 fi
