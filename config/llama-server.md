@@ -75,8 +75,17 @@ generated`):
 ### Cheap things to rule out first
 
 - Plugged in, Low Power Mode off — battery and LPM throttle the GPU hard.
-- All layers offloaded to GPU in the startup log. An expert on the CPU
-  collapses decode.
+- **All layers offloaded**, not merely "Metal exists". Two different things:
+
+      llama-server --list-devices          # is there a Metal device at all
+      # and in serve.sh's startup log:
+      ggml_metal_init: found device: Apple M4 Pro
+      load_tensors: offloaded 49/49 layers to GPU     # <- the one that matters
+
+  A partial offload (`48/49`) leaves work on the CPU and collapses decode,
+  and it does not look like an error. `setup/03-verify.sh` only checks the
+  first of these — the offload count has to be read from the server log.
+  (Note `--version` never mentions Metal; use `--list-devices`.)
 - No swapping. ~20 GB of weights plus KV plus Chrome plus screenshots is
   tighter on 48 GB than it looks, and if it swaps nothing else matters.
 

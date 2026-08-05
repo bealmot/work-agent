@@ -16,11 +16,13 @@ have llama-server || { echo "ERROR: llama-server not on PATH after install" >&2;
 # Metal is what makes this viable on the M4. A CPU-only build will run, but
 # the vision projector alone can take minutes per screenshot -- which reads
 # as "the agent is hung" rather than as a build problem.
-if llama-server --version 2>&1 | grep -qi metal; then
-  echo "    Metal backend present"
+# --list-devices enumerates backends; --version prints only version and build
+# info and never mentions Metal, so grepping it is a guaranteed false negative.
+if llama-server --list-devices 2>&1 | grep -qi metal; then
+  echo "    Metal device present"
 else
-  echo "    WARNING: no Metal backend detected in llama-server --version." >&2
-  echo "    Expect very slow image prefill. Reinstall with: brew reinstall llama.cpp" >&2
+  echo "    WARNING: no Metal device in 'llama-server --list-devices'." >&2
+  echo "    Expect very slow inference. Reinstall with: brew reinstall llama.cpp" >&2
 fi
 
 echo "==> Hermes CLI"

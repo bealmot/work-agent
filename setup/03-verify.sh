@@ -40,7 +40,7 @@ check "node installed"            command -v node
 check "uv installed"              command -v uv
 check "hermes installed"          command -v hermes
 check "llama-server installed"    command -v llama-server
-check "metal backend"             sh -c 'llama-server --version 2>&1 | grep -qi metal'
+check "metal device present"      sh -c 'llama-server --list-devices 2>&1 | grep -qi metal'
 check "llama-server up"           curl -sf "$API/health"
 check "model listed"              curl -sf "$API/v1/models"
 check "playwright mcp cached"     npx -y @playwright/mcp@0.0.32 --version
