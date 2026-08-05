@@ -2,16 +2,14 @@
 # Render config/cli-config.yaml into ~/.hermes/cli-config.yaml, substituting
 # absolute paths. Idempotent; backs up any existing config first.
 #
-# This exists because MCP server args get no tilde expansion and no variable
-# expansion -- the Playwright profile path has to be a literal absolute path
-# containing your username. Hand-editing that on a machine with no clipboard
-# is how typos get in, so it is generated.
+# Substitutes __HOME__ so no config value depends on tilde expansion, and
+# backs up any existing config instead of clobbering it. Hand-editing paths on
+# a machine with no clipboard is how typos get in, so it is generated.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)/config/cli-config.yaml"
 DEST_DIR="$HOME/.hermes"
 DEST="$DEST_DIR/cli-config.yaml"
-PROFILE="$HOME/.work-agent-profile"
 
 [ -f "$SRC" ] || { echo "ERROR: $SRC not found" >&2; exit 1; }
 
@@ -33,10 +31,4 @@ if grep -q "__HOME__" "$DEST"; then
   exit 1
 fi
 
-mkdir -p "$PROFILE"
-
 echo "==> Wrote $DEST"
-echo "    Playwright profile: $PROFILE"
-echo
-echo "The profile starts empty. Hermes will launch the installed Chrome"
-echo "against it; log into your work tools once and the session persists."

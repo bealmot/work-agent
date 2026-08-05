@@ -2,10 +2,16 @@
 # Copy to local/sites.yaml on the work machine and fill in real hosts.
 # local/ is git-ignored; never commit real internal hostnames.
 #
-# layer: 1 = DOM actions via Playwright (default, preferred)
-#        2 = DOM perception + OS-level clicks via scripts/osclick.py
-# probe notes: record what failed when you tried layer 1, and the date —
-# sites change; re-probe when a layer-2 site gets a big UI update.
+# Every tool here is driven through the real managed Chrome via computer_use
+# (see skills/browser-ops/SKILL.md). Layers describe PERCEPTION, since
+# actuation is always element-indexed:
+#
+#   layer: 1 = accessibility tree is sufficient (default, preferred)
+#          2 = needs DOM access via the javascript param / page tool
+#          3 = needs pixels (canvas or custom-rendered; read-only in practice)
+#
+# probe notes: record what failed at the lower layer, and the date — sites
+# change; re-probe when a layer-2/3 site gets a big UI update.
 
 sites:
   - name: zendesk

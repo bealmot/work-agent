@@ -35,31 +35,18 @@ if ! curl -s -o /dev/null "$API/health" 2>/dev/null; then
   exit 1
 fi
 
-check "cliclick installed"        command -v cliclick
-check "node installed"            command -v node
 check "uv installed"              command -v uv
 check "hermes installed"          command -v hermes
 check "llama-server installed"    command -v llama-server
 check "metal device present"      sh -c 'llama-server --list-devices 2>&1 | grep -qi metal'
 check "llama-server up"           curl -sf "$API/health"
 check "model listed"              curl -sf "$API/v1/models"
-check "playwright mcp cached"     npx -y @playwright/mcp@0.0.32 --version
 check "hermes config installed"   test -f "$HOME/.hermes/cli-config.yaml"
-# An unsubstituted placeholder means Playwright would be handed the literal
-# path "__HOME__/.work-agent-profile" and fail at browser launch, well away
-# from anything that looks like a config problem.
+# An unsubstituted placeholder means Hermes gets a literal "__HOME__/..." path
+# and silently finds no skills — a failure that looks like the agent ignoring
+# its instructions rather than like a config problem.
 check "hermes config rendered"    sh -c '! grep -q __HOME__ "$HOME/.hermes/cli-config.yaml" 2>/dev/null'
-check "playwright profile dir"    test -d "$HOME/.work-agent-profile"
 
-# CDP is no longer the default path: Chrome 136+ refuses
-# --remote-debugging-port on the default profile and managed policy may strip
-# it. Reported only as information — its absence is expected, not a problem.
-if curl -sf http://localhost:9222/json/version >/dev/null 2>&1; then
-  echo "INFO  chrome CDP is up (legacy path — not used by the default config)"
-else
-  echo "INFO  chrome CDP not up (expected — the default config uses a"
-  echo "      dedicated Playwright profile, not CDP)"
-fi
 
 # The model id the server actually advertises. An earlier version of this
 # script hardcoded "any" in every probe on the assumption llama-server ignores

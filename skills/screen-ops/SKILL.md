@@ -26,17 +26,30 @@ snapshots, and coordinates are guesses in a way element refs are not.
 
 ## Procedure
 
-1. **Capture with SOM first.** `capture(mode="som")` screenshots and numbers
-   every interactive element; you then click by index. Prefer this over raw
-   coordinates always — it turns "predict a pixel location" into "choose an
-   element," which is a far easier problem and a far cheaper mistake.
-2. **If SOM returns few or no marks**, the AX tree is sparse (typical for
-   canvas and custom-drawn UIs). Fall back to `capture(mode="ax")` to inspect
-   structure, and only then to raw coordinates.
-3. **Re-capture after every action** and confirm the screen changed as
+1. **Read the accessibility tree first** — `get_window_state`, or
+   `capture(mode="ax")`. It is text, not an image: an order of magnitude
+   cheaper to process than a screenshot and precise rather than approximate.
+   Act on `element_index`.
+2. **Only then consider pixels**, and only on a concrete signal:
+   `suspected_noop` or `degraded` in a result, repeated labels that
+   `element_index` cannot disambiguate, or the tree visibly disagreeing with
+   the screen. A hunch is not a signal.
+3. **Re-read state after every action** and confirm the screen changed as
    expected before planning the next one. Never chain blind actions.
 4. Prefer keyboard over mouse where an equivalent exists — menu shortcuts and
    tab traversal are deterministic; coordinates are not.
+
+> Earlier versions of this skill said to capture with SOM first. That was
+> wrong: it spends a screenshot to rediscover structure the AX tree already
+> has. Screenshots are the fallback, not the opening move.
+
+**Never mix coordinate spaces.** `elements[].frame` is in logical points while
+pixel actions use window-local screenshot pixels; mixing them misclicks with
+no error. Staying on `element_index` sidesteps it.
+
+**For anything in Chrome, use `skills/browser-ops/SKILL.md` instead** — it has
+the DOM-via-Apple-Events path and the posture constraints. This skill covers
+native apps.
 
 ## Notes
 
