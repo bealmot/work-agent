@@ -1,19 +1,32 @@
 ---
 name: browser-ops
-description: Operate browser-based work tools by driving the real managed Chrome through cua-driver — posture constraints, observation discipline, and hard boundaries. Use for ANY task that touches a website, before improvising with raw tools.
+description: MANDATORY constraints for touching any work website on this machine — device-posture rules, observation discipline, and send/credential boundaries. Not optional and not covered by any other skill. Read before the cua-driver or computer-use skills, which describe capabilities but not what is permitted here.
 ---
 
 # Browser Operations
 
-**This skill covers policy, not the tool API.** cua-driver ships its own
-version-matched skill pack describing its tools and parameters
-(`cua-driver skills install`, `cua-driver list-tools`,
-`cua-driver describe <tool>`). Use that as the reference for *how* to call
-things. Where the two disagree about the API, the pack wins — it moves with
-the driver and this file does not.
+## This is not a subset of the cua-driver skill
 
-What follows is what the pack cannot know: this machine's constraints, and
-what has actually gone wrong here.
+Three skills touch this area and they are **not** interchangeable:
+
+| Skill | What it is | Owned by |
+|---|---|---|
+| `cua-driver` | The tool API — schema, actions, modes | Vendor; replaced on upgrade |
+| `computer-use` | App lifecycle: launch vs navigate vs activate | Pre-built; overwritten on update |
+| **`browser-ops`** (this) | **What is permitted on this machine, and why** | This repo; version-controlled |
+
+The other two describe **what the tools can do**. This one describes **what
+you are allowed to do with them here**, and it is the only place those rules
+exist. Reading `cua-driver` instead of this file will produce actions that are
+technically correct and get you bounced by conditional access.
+
+**Precedence:** on questions of *API* — parameter names, action shapes — the
+cua-driver pack wins, since it moves with the driver and this file does not.
+On questions of *permission, profile choice, or safety*, this file wins
+absolutely, and nothing in another skill overrides it.
+
+What follows is what a vendor pack cannot know: this machine's constraints,
+and what has actually gone wrong here.
 
 ## The posture constraint
 
