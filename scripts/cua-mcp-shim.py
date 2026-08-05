@@ -32,7 +32,37 @@ MAX_ELEMENTS = int(os.environ.get("CUA_SHIM_MAX_ELEMENTS", "300"))
 MAX_DEPTH = int(os.environ.get("CUA_SHIM_MAX_DEPTH", "10"))
 ALLOW_SHOT = os.environ.get("CUA_SHIM_ALLOW_SCREENSHOT") == "1"
 QUIET = os.environ.get("CUA_SHIM_QUIET") == "1"
-DRIVER = os.environ.get("CUA_SHIM_CMD", "cua-driver")
+
+
+def find_driver():
+    """Locate cua-driver without relying on PATH.
+
+    GUI-launched macOS apps (Hermes desktop) do NOT inherit the shell's PATH,
+    so a bare "cua-driver" resolves fine from a terminal and not at all from
+    the app -- and the MCP server then fails to spawn with no visible error.
+    Upstream hits the same class of bug: hermes-agent#69138.
+    """
+    explicit = os.environ.get("CUA_SHIM_CMD")
+    if explicit:
+        return explicit
+    from shutil import which
+    found = which("cua-driver")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    for cand in (
+        f"{home}/.local/bin/cua-driver",
+        "/usr/local/bin/cua-driver",
+        "/opt/homebrew/bin/cua-driver",
+        f"{home}/.cua/bin/cua-driver",
+        "/Applications/CuaDriver.app/Contents/MacOS/cua-driver",
+    ):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return "cua-driver"  # let exec fail loudly rather than guess further
+
+
+DRIVER = find_driver()
 
 # Tools whose results are unbounded page dumps. Names are matched loosely so a
 # driver rename does not silently disable the clamp.

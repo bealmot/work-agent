@@ -24,12 +24,19 @@ if [ -f "$DEST" ]; then
   echo "    Merge anything you had customised — this writes a fresh file."
 fi
 
-sed "s|__HOME__|$HOME|g" "$SRC" > "$DEST"
+# Absolute interpreter path: a GUI-launched Hermes does not inherit the shell
+# PATH, so a bare "python3" in the config spawns fine from a terminal and not
+# at all from the desktop app -- silently, leaving Hermes with no cua tools.
+PYBIN="$(command -v python3 || true)"
+[ -n "$PYBIN" ] || { echo "ERROR: python3 not found on PATH" >&2; exit 1; }
 
-if grep -q "__HOME__" "$DEST"; then
-  echo "ERROR: placeholder substitution failed — $DEST still contains __HOME__" >&2
+sed -e "s|__HOME__|$HOME|g" -e "s|__PYTHON__|$PYBIN|g" "$SRC" > "$DEST"
+
+if grep -qE "__HOME__|__PYTHON__" "$DEST"; then
+  echo "ERROR: placeholder substitution failed — $DEST still has placeholders" >&2
   exit 1
 fi
+echo "==> Interpreter: $PYBIN"
 
 # cua-driver ships its own version-matched skill pack, but Hermes is NOT in
 # the driver's auto-detect list (Claude Code, Codex, OpenClaw, OpenCode), so

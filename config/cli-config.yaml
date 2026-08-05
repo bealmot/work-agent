@@ -52,7 +52,11 @@ mcp_servers:
     # Tune via env: CUA_SHIM_MAX_ELEMENTS, CUA_SHIM_MAX_DEPTH,
     # CUA_SHIM_ALLOW_SCREENSHOT. To bypass, point command back at cua-driver
     # with args ["mcp"].
-    command: python3
+    # Absolute interpreter path, substituted by install-hermes-config.sh.
+    # GUI-launched apps (Hermes desktop) do NOT inherit the shell PATH, so a
+    # bare "python3" works from a terminal and silently fails to spawn from
+    # the app -- leaving Hermes running with no cua tools and no error.
+    command: __PYTHON__
     args:
       - "__HOME__/work-agent/scripts/cua-mcp-shim.py"
     timeout: 120
