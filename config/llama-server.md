@@ -91,16 +91,30 @@ generated`):
 
 ### Order of impact for computer use
 
-1. **KV at f16** (above) — the largest single decode factor found so far.
-2. **`--spec-type draft-mtp`**, once verified as engaging.
-3. **`--image-max-tokens`** — lower until SOM element numbers stop being
-   legible. Prefill is not the bottleneck today, but images also consume the
-   context whose growth slows decode.
-4. **Prefer `mode="ax"` over screenshots** where the app has a usable
-   accessibility tree. See `skills/screen-ops/SKILL.md`.
-5. **Take fewer steps.** Layer 1 DOM perception is 1–2 orders of magnitude
-   cheaper than a screenshot round-trip. The escalation discipline in
-   `skills/browser-ops/SKILL.md` is a performance feature, not just a safety one.
+Most of the win is **above** the server, in how many tokens each step costs
+and how many steps there are. Flags come second.
+
+1. **`include_screenshot: false` on every `get_window_state`.** It defaults to
+   *true*, so the "text-only" path ships a full image per call unless you say
+   otherwise. (`capture_mode` is deprecated and ignored.) Removes image
+   prefill from the loop entirely.
+2. **No thinking tokens** — `--reasoning-budget 0` plus
+   `--chat-template-kwargs '{"enable_thinking": false}'`, both set by
+   `scripts/serve.sh`. A reasoning block before every GUI step is pure latency
+   on the bandwidth-bound half of the workload. `WORK_AGENT_THINK=on` to
+   restore it for judgment-heavy work.
+3. **Scope the AX tree** — `query`, and lower `max_elements` (default 2000) /
+   `max_depth` (default 25). A full page tree is thousands of tokens; a
+   filtered read is tens to hundreds.
+4. **Targeted DOM extraction over full-state perception** — once a site's
+   selectors are known, `query_dom` returns what you need directly. Record
+   them in `local/sites.yaml`.
+5. **KV at f16** — the largest single *flag*-level decode factor found so far.
+6. **`--spec-type draft-mtp`**, once verified as engaging.
+7. **`--image-max-tokens`** — only matters on the pixel fallback now.
+8. **Take fewer steps.** The fastest action is one that needs no model call:
+   deterministic skills for known sequences, model involvement only for
+   judgment. This dwarfs every flag on this page.
 
 ## Known caveat: prompt cache
 

@@ -26,10 +26,13 @@ snapshots, and coordinates are guesses in a way element refs are not.
 
 ## Procedure
 
-1. **Read the accessibility tree first** — `get_window_state`, or
-   `capture(mode="ax")`. It is text, not an image: an order of magnitude
-   cheaper to process than a screenshot and precise rather than approximate.
-   Act on `element_index`.
+1. **Read the accessibility tree first** — `get_window_state` with
+   **`include_screenshot: false`**. That flag defaults to *true*, so omitting
+   it silently ships a full screenshot on every call; `capture_mode` is
+   deprecated and ignored and will not give you a text-only read. Scope with
+   `query` (filters to matching actionable rows and their ancestors, without
+   renumbering `element_index`) and lower `max_elements` / `max_depth` from
+   their defaults of 2000 / 25. Act on `element_index`.
 2. **Only then consider pixels**, and only on a concrete signal:
    `suspected_noop` or `degraded` in a result, repeated labels that
    `element_index` cannot disambiguate, or the tree visibly disagreeing with

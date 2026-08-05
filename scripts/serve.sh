@@ -47,6 +47,21 @@ IMG_MAX_TOKENS="${WORK_AGENT_IMG_MAX_TOKENS:-1024}"
 #   WORK_AGENT_KV=q8_0 scripts/serve.sh
 KV_TYPE="${WORK_AGENT_KV:-f16}"
 
+# Thinking mode. Qwen3.6 has thinking and non-thinking modes in one model; if
+# thinking is on, it emits a reasoning block BEFORE every action. In a
+# computer-use loop that is hundreds of wasted tokens per step, on the
+# bandwidth-bound half of the workload -- easily the largest latency item.
+#
+# enable_thinking:false alone is not reliably sufficient on Qwen3 in llama.cpp
+# (models keep emitting Thinking blocks); --reasoning-budget 0 is what
+# actually forces termination, by counting reasoning tokens and appending the
+# end sequence. Set both.
+#
+# TRADE-OFF: thinking may help judgment-heavy work (ticket triage, drafting)
+# and hurts nothing but speed there. It is off by default because GUI stepping
+# is the latency-sensitive path. WORK_AGENT_THINK=on to restore it.
+THINK="${WORK_AGENT_THINK:-off}"
+
 ARGS=(
   -hf "$MODEL"
   --port "$PORT"
@@ -62,6 +77,11 @@ ARGS=(
 # Self-speculative decoding. Opt out with WORK_AGENT_SPEC=off if you switch to
 # a non-MTP model -- draft-mtp on weights with no MTP head will fail to load.
 [ "${WORK_AGENT_SPEC:-on}" = "on" ] && ARGS+=(--spec-type draft-mtp)
+
+if [ "$THINK" = "off" ]; then
+  ARGS+=(--reasoning-budget 0
+         --chat-template-kwargs '{"enable_thinking": false}')
+fi
 
 # --context-shift is left at its default (disabled) on purpose. Shifting a
 # context that contains a rolling window of screenshots silently discards

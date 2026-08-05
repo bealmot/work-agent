@@ -32,15 +32,45 @@ compliance page.
 
 ### Layer 1 — accessibility tree
 `get_window_state` returns a structured tree; act on `element_index`, not
-coordinates. This is cheap, text-only, and precise. Chrome's AX tree is
-sometimes sparse on first read — if it comes back thin, retry once before
-concluding anything.
+coordinates.
 
-### Layer 2 — DOM through Apple Events
-When the AX tree doesn't expose what you need (common in Chromium), use the
-`javascript` param on `get_window_state`, or the `page` tool, to query the DOM
-directly. This is real DOM access against the real logged-in browser — reach
-for it before screenshots, not after.
+**Always pass `include_screenshot: false`.** It defaults to **true**, so every
+call otherwise grabs the screen and ships a full image you did not ask for.
+This is the single most expensive mistake available in this skill. (`capture_mode`
+is deprecated and ignored — it does not give you a text-only read.)
+
+**Always scope the tree.** Defaults are `max_elements: 2000` and
+`max_depth: 25`, which serialize far more of a page than any one step needs:
+
+- `query` — case-insensitive filter returning matching actionable rows plus
+  their actionable ancestors. It does **not** renumber `element_index`, so
+  filtering is free of consistency risk. Use it whenever you know roughly what
+  you are looking for ("Submit", "ticket", "assignee").
+- `max_elements` / `max_depth` — lower them for deep or sprawling pages.
+
+Read `element_count` vs `filtered_element_count` to see how much you pulled.
+
+Chrome's AX tree is sometimes sparse on first read — if it comes back thin,
+retry once before concluding anything.
+
+### Layer 2 — DOM
+Prefer **`get_browser_state` and the typed `browser_*` tools** for exact
+targeting. Fall back to the legacy `page` tool only if those cannot express
+what you need — it supports `execute_javascript`, `get_text`, `query_dom`,
+`click_element`, `insert_text`.
+
+Targeted extraction beats full-state perception by a wide margin: a
+`query_dom` for one selector returns tens of tokens where a tree read returns
+thousands. Once a site's selectors are known, record them in `local/sites.yaml`
+and go straight here.
+
+Two gotchas:
+- `page` **mutating** actions need `CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`
+  set at daemon startup. Reads work without it.
+- JS via Apple Events requires Chrome's *Allow JavaScript from Apple Events*
+  setting. `page` exposes `enable_javascript_apple_events` to patch it.
+- `target_url_contains` picks the right tab on a multi-tab window — use it
+  rather than assuming the active tab.
 
 ### Layer 3 — pixels
 Escalate **only on a concrete signal**, never on a hunch:
