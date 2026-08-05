@@ -64,13 +64,58 @@ Targeted extraction beats full-state perception by a wide margin: a
 thousands. Once a site's selectors are known, record them in `local/sites.yaml`
 and go straight here.
 
-Two gotchas:
+#### Always pin the target
+**`target_url_contains` is mandatory on every `page` call**, not an
+optimization. With it unset the tool picks a target for you, and these apps
+keep hidden `about:blank` iframes around for embedded apps and auth — so JS
+lands in a blank document that reports an empty page with no error.
+
+Use `get_browser_state` first to enumerate tabs, then pin.
+
+#### Make every read self-identifying
+Return the execution context alongside the data, always:
+
+    JSON.stringify({ url: location.href, data: /* the actual query */ })
+
+It costs a few tokens and converts a silently-wrong answer into an obviously
+wrong one. Without it there is nothing in the result to distinguish "the page
+has no such content" from "this isn't the page."
+
+#### An empty result is a channel failure until proven otherwise
+`innerText.length === 0`, an empty `query_dom`, a null value — treat all of
+these as evidence about the *connection*, not about the page. Before drawing
+any conclusion from an empty read, make the tool return something that cannot
+legitimately be empty:
+
+    JSON.stringify({url: location.href, title: document.title,
+                    ready: document.readyState,
+                    bodyKids: document.body.children.length,
+                    iframes: document.querySelectorAll('iframe').length,
+                    htmlLen: document.documentElement.outerHTML.length})
+
+- nothing returned / error → Apple Events JS is blocked (below)
+- `url` is `about:blank` or not the target → wrong target; pin it
+- `iframes > 0`, `bodyKids` small → content is in a frame
+- `htmlLen` large but no text → *then* investigate the DOM itself
+
+This happened on 2026-08-05: an empty `innerText` in a blank iframe produced a
+confident, coherent, and entirely wrong conclusion that the app rendered into
+a closed shadow root. The reasoning was fine; the observation was corrupt.
+
+#### Other gotchas
+- JS via Apple Events requires Chrome's *Allow JavaScript from Apple Events*
+  setting, which is **off by default**. `page` exposes
+  `enable_javascript_apple_events` to patch it. A blocked call can return
+  empty rather than raising — see above.
 - `page` **mutating** actions need `CUA_DRIVER_ENABLE_LEGACY_PAGE_MUTATIONS=1`
   set at daemon startup. Reads work without it.
-- JS via Apple Events requires Chrome's *Allow JavaScript from Apple Events*
-  setting. `page` exposes `enable_javascript_apple_events` to patch it.
-- `target_url_contains` picks the right tab on a multi-tab window — use it
-  rather than assuming the active tab.
+- Shadow DOM: a plain `document.querySelector` cannot reach into a shadow
+  root. **Open** roots are traversable via `.shadowRoot`; **closed** roots
+  return `null` and are genuinely unreachable from page JS. Distinguish them —
+  `[...document.querySelectorAll('*')].filter(e => e.shadowRoot).length` — and
+  only conclude "closed" once the execution context is confirmed correct.
+  The AX tree pierces both, because accessibility is computed over the flat
+  tree; that makes Layer 1 the reliable fallback for component-heavy apps.
 
 ### Layer 3 — pixels
 Escalate **only on a concrete signal**, never on a hunch:
@@ -101,6 +146,9 @@ Then re-capture and confirm. Do not chain blind pixel actions.
 - On any tool error: re-read state, retry once with a corrected action, then
   escalate to the user. Fail loud — never claim success without a fresh
   read that proves the expected change.
+- **Never build a theory on an empty result.** Prove the channel first (see
+  Layer 2). A corrupt observation produces confident, coherent, wrong
+  conclusions, and no amount of careful reasoning downstream recovers from it.
 
 ## Hard boundaries
 
