@@ -91,8 +91,12 @@ Actuation is always element-indexed. Perception escalates only as needed:
 
 0. **The site's own API**, read same-origin from page JS in the authenticated
    tab — no token needed, the session cookie authenticates it. Verified for
-   Zendesk 2026-08-06 (10/10). **Where a site has this, use it for every read.**
-   See `skills/zendesk-api/SKILL.md`; record the layer in `local/sites.yaml`.
+   Zendesk 2026-08-06: 10/10, and **~500 bytes of JSON against ~59 KB of
+   accessibility tree for the same list, roughly 100x**. **Where a site has
+   this, use it for every read.** Note `execute_javascript` returns only
+   SYNCHRONOUS results — use `XMLHttpRequest` with `async: false` in an IIFE;
+   `fetch`/`await`/`.then()` return empty. See `skills/zendesk-api/SKILL.md`;
+   record the layer in `local/sites.yaml`.
 1. **Accessibility tree** — text and precise, but see the Zendesk caveat above:
    on a large-tree app it is neither cheap nor reliable unscoped. Always
    `query` + caps.
@@ -198,11 +202,22 @@ This is the same class of defect as AX index drift, one level up: an identifier
 that looks stable, is not, and punishes reuse. Treat **every** identifier this
 driver hands you as a cache with an unknown expiry, never as a name.
 
-### Always pin the target
-Target selection is not optional. Unpinned, the tool picks for you, and these
-apps keep hidden `about:blank` iframes for embedded apps and auth — so JS
-lands in a blank document and reports an empty page with no error. Enumerate
-first, then pin by URL.
+### Target by `window_id`, NOT by `target_url_contains`
+
+Target selection is not optional — these apps keep hidden `about:blank` iframes
+for embedded apps and auth, so an untargeted call lands in a blank document and
+reports an empty page with no error.
+
+But **do not pin with `target_url_contains`.** It triggers CDP discovery, which
+fails on this Chrome configuration because `--remote-debugging-port` is refused
+on the managed profile. Passing it breaks the call outright. Verified
+2026-08-06; an earlier version of this file wrongly required it.
+
+**Target with a fresh `window_id`** from `list_windows`, taken immediately
+before the call — and verify you landed correctly by returning
+`url: location.href` in the result (below). With URL pinning unavailable, that
+self-check is the only thing standing between a wrong-tab read and a confident
+wrong answer.
 
 ### Make every read self-identifying
 Return the execution context alongside the data:
