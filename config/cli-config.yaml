@@ -11,7 +11,19 @@ model:
   context_length: 65536                # must match -c in scripts/serve.sh; hermes floor is 64k
 
 skills:
-  creation_nudge_interval: 15
+  # Raised from 15. This is how often Hermes is prompted to create or revise
+  # skills, and on 2026-08-05 it acted on that nudge by editing
+  # skills/browser-ops/SKILL.md -- a version-controlled file -- in the middle of
+  # a benchmark run. Its measurements were good and its edits were not reviewed,
+  # which is the wrong way round.
+  #
+  # An agent revising its own instructions mid-task makes the task unreadable:
+  # you can no longer tell whether a behaviour change came from the experiment
+  # or from the instructions changing underneath it. Skills it authors for
+  # itself still land in ~/.hermes/skills/, which is the right place for them.
+  #
+  # Lower it again once the evidence-gathering phase is over.
+  creation_nudge_interval: 200
   # Read-only external skills from the cloned repo; adjust path if cloned
   # elsewhere. Hermes-created skills still write to ~/.hermes/skills/.
   external_dirs:
