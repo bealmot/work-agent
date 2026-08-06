@@ -114,6 +114,52 @@ and how many steps there are. Flags come second.
    deterministic skills for known sequences, model involvement only for
    judgment. This dwarfs every flag on this page.
 
+## The compaction death spiral — the failure mode to recognise
+
+**Symptom:** after a couple of automatic compactions the session stops making
+progress. Turns take minutes. The harness reports "session compressed N times,
+accuracy may degrade" and then sits with no output for 90+ seconds.
+
+**Cause:** compaction is the single most expensive operation available on this
+model, and the harness performs it automatically as a *defence* against running
+out of context. On a recurrent architecture it is the failure itself:
+
+1. To summarise the conversation, the compaction call must prefill the **entire**
+   context. At ~400 tok/s, 65k tokens is ~2.5 minutes before the first output
+   token. That is the "no output yet" wait — not a hang.
+2. Compaction replaces earlier turns, so the prefix changes **from the
+   beginning**. Cache reuse is exact-longest-common-prefix only, so the hit
+   rate drops to zero.
+3. Every later turn now re-prefills the whole compacted context from scratch.
+4. The summary plus new observations refill the window faster than the original
+   conversation did, so it compacts again — and each round starts from a cold
+   cache.
+
+It does not degrade gracefully. Two compactions is usually the point of no
+return.
+
+**Why this is counter-intuitive:** compaction is a genuinely good strategy on a
+full-attention model with server-side context editing, where it is applied
+after cache lookup. Here it spends a full re-prefill to buy back space that then
+costs a full re-prefill on every subsequent turn. The harness's own defence
+mechanism is the thing that kills the session.
+
+### Avoiding it
+
+- **Keep observations small.** This is the whole fix. Layer-0 API reads measure
+  ~500 bytes against ~59 KB for the same accessibility-tree read — roughly 100x
+  more headroom. The spiral was driven by oversized AX observations; remove
+  those and the threshold is never reached.
+- **One task per session.** Start fresh between tickets. A session that never
+  approaches the limit never compacts, and keeps its warm prefix for its whole
+  life. A long-running session is the risk factor, not a virtue.
+- **Prefer failing loudly to compacting.** If the harness can be told not to
+  auto-compact, do it. You lose the session either way, but in two seconds
+  instead of twenty minutes, and you find out immediately rather than watching
+  it degrade.
+- **Size the turn budget to the observation size.** A 60-turn budget assumes
+  cheap turns. It was sized before observations were bounded.
+
 ## The append-only contract — read this before tuning anything
 
 **Caching works. Reuse with holes does not.** Ordinary longest-common-prefix

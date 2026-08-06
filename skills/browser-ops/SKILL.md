@@ -276,6 +276,12 @@ AX tree pierces both, because accessibility is computed over the flat tree.
 - **Never reuse a `window_id`.** Refresh via `list_windows` before every call
   that takes one. A stale id crashes the MCP server outright — it is not a
   recoverable error and there is nothing to retry.
+- **Treat context pressure as a signal to stop, not to compact.** If the
+  session is filling up, your observations are too large — say so and finish
+  the task. Never summarise or compact the conversation to make room: on this
+  model that rewrites the prefix, kills cache reuse entirely, and each round is
+  slower than the last. Better to end a session cleanly than to spiral in one.
+  See `config/llama-server.md`, "The compaction death spiral".
 - **Never read a window with default limits.** `include_screenshot: false`,
   `max_elements`, `max_depth` and `query` are required on every call. An
   unbounded read costs ~140 s and 79% of the context window; a bounded one
