@@ -167,6 +167,33 @@ turn, and new tokens must be processed regardless of what is cached.
 
 Learned the hard way here; none of it is in the vendor docs.
 
+### Never reuse a `window_id` — refresh it before every call
+
+**A stale or invalid `window_id` does not return an error. It crashes the MCP
+server.** Confirmed on this machine 2026-08-06, after a long hunt in which the
+crash was attributed to the shim, to `page()` being unsupported, and to CDP
+requirements in turn. None of those were it.
+
+The rule:
+
+1. Call `list_windows` **immediately before** any `page` / `get_window_state`
+   call that takes a window.
+2. Take the `window_id` from that fresh result. Never from an earlier call,
+   never from your own notes, never from a prior step in the same task.
+3. Keep the **`pid` stable** — the Chrome process does not churn. Only the
+   window identifier does.
+
+**Why refresh eagerly instead of retrying on failure.** The normal pattern —
+cache an id, catch the error, refresh, retry — is unavailable here, because the
+failure is *fatal*, not recoverable. A stale id takes the whole MCP server down,
+Hermes loses its tool surface, and the session ends. There is nothing to catch.
+The cost of a stale id is a dead session; the cost of an extra `list_windows`
+is one cheap call. Pay the cheap one, every time.
+
+This is the same class of defect as AX index drift, one level up: an identifier
+that looks stable, is not, and punishes reuse. Treat **every** identifier this
+driver hands you as a cache with an unknown expiry, never as a name.
+
 ### Always pin the target
 Target selection is not optional. Unpinned, the tool picks for you, and these
 apps keep hidden `about:blank` iframes for embedded apps and auth — so JS
@@ -227,6 +254,9 @@ AX tree pierces both, because accessibility is computed over the flat tree.
 - **Never build a theory on an empty result.** Prove the channel first. A
   corrupt observation produces confident, coherent, wrong conclusions, and no
   amount of careful reasoning downstream recovers from it.
+- **Never reuse a `window_id`.** Refresh via `list_windows` before every call
+  that takes one. A stale id crashes the MCP server outright — it is not a
+  recoverable error and there is nothing to retry.
 - **Never read a window with default limits.** `include_screenshot: false`,
   `max_elements`, `max_depth` and `query` are required on every call. An
   unbounded read costs ~140 s and 79% of the context window; a bounded one
