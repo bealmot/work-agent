@@ -93,9 +93,15 @@ Actuation is always element-indexed. Perception escalates only as needed:
    on a large-tree app it is neither cheap nor reliable unscoped. Always
    `query` + caps.
 2. **DOM** — when the AX tree lacks what you need, or is too large to trust.
-3. **Pixels** — only on a concrete signal: `suspected_noop`, `degraded`,
-   repeated labels `element_index` cannot disambiguate, or the tree visibly
-   disagreeing with the screen. A hunch is not a signal.
+3. **Pixels** — **currently unavailable, and asking for them fails silently.**
+   The MCP shim forces `include_screenshot: false` on every window read, so a
+   pixel escalation returns no image and you will be reasoning about a screen
+   you cannot see. Do not escalate here hoping for a picture.
+
+   If you reach a genuine pixel signal — `suspected_noop`, `degraded`, repeated
+   labels `element_index` cannot disambiguate, or the tree contradicting the
+   screen — **stop and report it to the operator**. That is a request for a
+   human decision about re-enabling screenshots, not a step you can take.
 
 > **On large-tree apps this order inverts.** Where the AX tree exceeds what can
 > be captured intact, prefer URL navigation for movement and DOM for reading.
