@@ -108,11 +108,42 @@ Start a session with the tool enabled:
 
   hermes -t computer_use chat
 
-Or enable it permanently -- config/cli-config.yaml already lists it under
-`tools:`; copy that file to ~/.hermes/cli-config.yaml.
-
-Telemetry is disabled by default (computer_use.cua_telemetry: false).
-Nothing in this path makes network calls; the driver is local.
+Telemetry is disabled by default. Nothing in this path makes network calls;
+the driver is local.
 
 Read skills/screen-ops/SKILL.md before pointing this at a real work tool.
 EOF
+
+echo "==> Restoring the shim registration"
+# `hermes computer-use install` above re-registers a `cua` MCP server pointing
+# STRAIGHT AT THE DRIVER, replacing the one install-hermes-config.sh pointed at
+# scripts/cua-mcp-shim.py. Following the runbook top to bottom therefore ends
+# with every window-read clamp switched off.
+#
+# Nothing else catches it. 03-verify.sh only inspects ~/.hermes/cli-config.yaml,
+# never ~/.hermes/config.yaml where MCP servers actually live, and the Phase 2
+# gate ("reads Zendesk, cursor never moves") passes identically either way. The
+# tools all still work -- they are just ~20x more expensive. It presents as
+# 50k-token prompts and ~140 s prefills with no visible cause.
+#
+# Repair ONLY the MCP entry. Do NOT call install-hermes-config.sh from here: it
+# re-renders ~/.hermes/cli-config.yaml from the template, turning its
+# "merge anything you customised" warning into a silent overwrite.
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+SHIM="$REPO/scripts/cua-mcp-shim.py"
+PYBIN="$(command -v python3 || true)"
+if [ -n "$PYBIN" ] && [ -f "$SHIM" ] && command -v hermes >/dev/null 2>&1; then
+  printf 'y\n' | hermes mcp add cua --command "$PYBIN" --args "$SHIM" >/dev/null 2>&1 || true
+fi
+
+if grep -q "cua-mcp-shim.py" "$HOME/.hermes/config.yaml" 2>/dev/null; then
+  echo "OK: cua MCP -> shim"
+else
+  echo "ERROR: the cua MCP entry is NOT pointed at the shim." >&2
+  echo "       Window reads are unbounded; expect ~50k-token prompts and" >&2
+  echo "       ~140 s prefills. Every tool still works, which is exactly why" >&2
+  echo "       no other check notices. Fix with:" >&2
+  echo "         hermes mcp remove cua" >&2
+  echo "         bash scripts/install-hermes-config.sh" >&2
+  exit 1
+fi

@@ -26,10 +26,8 @@ explicit flags, so they are debuggable and greppable.
 | `-fa on` | — | Flash attention. Helps on its own; the penalty is FA *combined with* quantized KV |
 | `-ctk/-ctv` | **f16** | Deliberately unquantized — see "The KV cache trap" below. Override with `WORK_AGENT_KV` |
 | `-c` | 65536 | Hermes requires ≥64k; agent loops need the room |
-| `--cache-reuse 256` | — | Reuses the stable system+skills prefix across turns instead of re-prefilling it |
-| `--keep -1` | — | Pins the initial prompt (see cache caveat below) |
 | `--jinja` | *default on* | Not passed explicitly — llama-server enables it already |
-| `--context-shift` | *default off* | Left off deliberately: shifting a context holding a rolling window of screenshots discards images mid-task. Fail loudly instead |
+| `--context-shift` | *default off* | Force-disabled by the mmproj anyway; left unset explicitly |
 
 ## Performance
 
@@ -116,17 +114,43 @@ and how many steps there are. Flags come second.
    deterministic skills for known sequences, model involvement only for
    judgment. This dwarfs every flag on this page.
 
-## Known caveat: prompt cache
+## The append-only contract — read this before tuning anything
 
-llama.cpp [#23030](https://github.com/ggml-org/llama.cpp/issues/23030) — the
-prompt cache is dropped rather than reused for this model family when the
-context is truncated (`failed to truncate tokens with position >= N - clearing
-the memory`). Open, closed as *not planned*, so don't architect around caching
-working.
+**Caching works. Reuse with holes does not.** Ordinary longest-common-prefix
+reuse is what makes later turns cheap — measured 2026-08-05: a cold turn is
+~24k tokens of prefill, a warm append-only turn is a fraction of that.
 
-`--keep -1` mitigates it partially by pinning the prefix. The real lever is
-keeping images small enough that you never approach the limit — which is the
-same fix as everything else on this page.
+What does not work is reusing a prefix you have *edited*. Qwen3.6-35B-A3B is 30
+Gated-DeltaNet (recurrent) layers interleaved with 10 attention layers, and
+recurrent state cannot be shifted or partially reused. So any mid-history
+rewrite — pruning an old tool result, dropping a screenshot, compacting,
+editing an earlier turn — invalidates the cache from the edit point and forces
+a full re-prefill of everything after it.
+
+**Context is append-only. Compression happens at write time, by emitting fewer
+tokens, or it does not happen at all.** A "helpful" prune turns every
+subsequent turn cold. This is the single most expensive mistake available in
+this stack, and an earlier version of this document licensed it by telling the
+reader not to architect around caching working. That was wrong.
+
+Truncation is still worth avoiding —
+[#23030](https://github.com/ggml-org/llama.cpp/issues/23030) drops the cache
+when the context is truncated — but the fix is bounded observations, not
+pruning. Bounded reads keep you clear of the ceiling, which keeps the expensive
+prefix alive.
+
+### Two flags were removed as dead
+
+- **`--cache-reuse`** reuses cache via KV *shifting*, and llama-server forces it
+  to 0 at startup when an mmproj is loaded — which this stack does, since the
+  vision probe passes — logging `cache_reuse is not supported by multimodal, it
+  will be disabled`. Check the startup log: that warning is confirmation, not a
+  problem.
+- **`--keep`** is only read inside the context-shift branch, and context shift
+  is off, so `--keep -1` did nothing.
+
+Neither removal changes behaviour. They were describing a mechanism that was
+never running.
 
 ## When prompt processing is the bottleneck
 
@@ -160,7 +184,7 @@ Upstream defaults are 2048 / 512:
 
 Larger micro-batches cost memory, so measure rather than assuming bigger wins.
 
-Order of attack: prompt-cache hit rate → per-turn constant size (skills, AX
+Order of attack: append-only discipline → per-turn constant size (skills, AX
 tree scope) → `-ub`. The first two change how many tokens you prefill; the
 flag only changes how fast you prefill them.
 

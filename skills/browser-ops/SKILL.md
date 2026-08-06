@@ -208,8 +208,14 @@ AX tree pierces both, because accessibility is computed over the flat tree.
 - **Max 25 actions per task.** At the limit: stop, summarize state, ask.
 - **Never repeat an action that didn't change the page.** Same action twice
   with the same result → reassess. A third identical attempt is forbidden.
-- **Keep context lean.** Only the latest window state matters; do not re-quote
-  earlier reads. Drop screenshots once read.
+- **Keep context lean at WRITE time, never by editing history.** Ask for less:
+  tighter `query`, lower caps, projected fields. Do not re-quote earlier reads
+  in your reasoning.
+  **Never prune, summarise, or compact earlier turns.** History is append-only
+  here: a mid-history rewrite invalidates the prompt cache from the edit point
+  and forces a full re-prefill of everything after it, which costs far more than
+  the tokens it removes. If context is filling, the reads were too big — fix
+  that, not the transcript.
 - On any tool error: re-read state, retry once with a corrected action, then
   escalate. Never claim success without a fresh read proving the change.
 - **Never build a theory on an empty result.** Prove the channel first. A

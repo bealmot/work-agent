@@ -84,8 +84,6 @@ ARGS=(
   -ctk "$KV_TYPE" -ctv "$KV_TYPE"
   -b "$BATCH" -ub "$UBATCH"
   --image-max-tokens "$IMG_MAX_TOKENS"
-  --cache-reuse 256             # reuse the stable system+skills prefix each turn
-  --keep -1                     # pin the initial prompt; see note below
 )
 
 # Self-speculative decoding. Opt out with WORK_AGENT_SPEC=off if you switch to
@@ -97,6 +95,21 @@ if [ "$THINK" = "off" ]; then
          --chat-template-kwargs '{"enable_thinking": false}')
 fi
 
+# --cache-reuse and --keep were REMOVED 2026-08-05. Both were dead here:
+#
+#   --cache-reuse reuses cache via KV *shifting*, and llama-server forces it to
+#   0 at startup when an mmproj is loaded (which this stack does -- the vision
+#   probe passes), logging "cache_reuse is not supported by multimodal, it will
+#   be disabled". It is also skipped per-request for prompts carrying images.
+#
+#   --keep is only read inside the context-shift branch, and context shift is
+#   off, so --keep -1 did nothing at all.
+#
+# This does NOT mean caching is off. Ordinary longest-common-prefix reuse still
+# works and is what makes later turns cheap -- measured, first call ~24k tokens,
+# subsequent calls a fraction. What does not work is reuse with HOLES, which is
+# why history must be append-only: see config/llama-server.md.
+#
 # --context-shift is left at its default (disabled) on purpose. Shifting a
 # context that contains a rolling window of screenshots silently discards
 # images mid-task; failing loudly at the limit is the better trade here.
