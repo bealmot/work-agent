@@ -6,9 +6,16 @@
 # (see skills/browser-ops/SKILL.md). Layers describe PERCEPTION, since
 # actuation is always element-indexed:
 #
-#   layer: 1 = accessibility tree is sufficient (default, preferred)
-#          2 = needs DOM access via the javascript param / page tool
-#          3 = needs pixels (canvas or custom-rendered; read-only in practice)
+#   layer: 0 = the site's own API, read same-origin from page JS in the
+#              authenticated tab. Cheapest by far where it works, and needs no
+#              token: the session cookie already in the browser authenticates
+#              it. Requires a recorded probe — never assume it.
+#          1 = accessibility tree is sufficient. NOT automatically preferred:
+#              on large-tree apps the tree truncates before it can be parsed.
+#          2 = DOM via the legacy `page` tool
+#          3 = needs pixels — currently UNAVAILABLE, the shim forces
+#              include_screenshot=false. Flagging layer 3 is a request for an
+#              operator decision, not a working config.
 #
 # probe notes: record what failed at the lower layer, and the date — sites
 # change; re-probe when a layer-2/3 site gets a big UI update.
@@ -16,8 +23,8 @@
 sites:
   - name: zendesk
     host: example.zendesk.com
-    layer: 1
-    notes: ""
+    layer: 0
+    notes: "same-origin API verified 10/10 on 2026-08-06 — see skills/zendesk-api"
 
   - name: outlook-web
     host: outlook.office.com

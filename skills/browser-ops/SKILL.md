@@ -89,6 +89,10 @@ Stop and say so — do not try another attachment mode.
 
 Actuation is always element-indexed. Perception escalates only as needed:
 
+0. **The site's own API**, read same-origin from page JS in the authenticated
+   tab — no token needed, the session cookie authenticates it. Verified for
+   Zendesk 2026-08-06 (10/10). **Where a site has this, use it for every read.**
+   See `skills/zendesk-api/SKILL.md`; record the layer in `local/sites.yaml`.
 1. **Accessibility tree** — text and precise, but see the Zendesk caveat above:
    on a large-tree app it is neither cheap nor reliable unscoped. Always
    `query` + caps.
