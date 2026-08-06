@@ -135,9 +135,45 @@ A worked example — the last three comments on a ticket:
 
 - **Zendesk Explore** — no public API. GUI only.
 - **Unsaved UI state** — what is typed in a composer, an open macro preview.
-- **Attachments** are binary. Report `file_name`, `size`, `content_url`; never
-  pull the bytes into context.
+- **Attachments** are binary. Never pull the bytes into context — see below.
 - **Anything a human is meant to look at** — navigate and let them see it.
+
+## Attachments — screenshots are often the whole ticket
+
+A customer's screenshot of an error dialog is frequently the entire content of a
+ticket, so reading them matters. But **image bytes must never enter your
+context**: a 500 KB screenshot is ~700 KB of base64, and context here is
+append-only — you cannot prune it back out. One inlined image ends the session.
+
+The comments endpoint lists attachments. Project only the metadata:
+
+    d.comments.flatMap(function(c){ return (c.attachments||[]).map(
+      function(a){ return {id:a.id, name:a.file_name, size:a.size,
+                           type:a.content_type, url:a.content_url}; }); })
+
+Then, for an image you actually need to read:
+
+1. Get the file onto disk. Try the `content_url` directly first — it may be
+   fetchable. If it returns HTML or 401 it needs the session: download it
+   **inside the authenticated browser** so it lands in `~/Downloads`. Do not
+   attach cookies to an external HTTP client; bot-shaped requests trip
+   Cloudflare on this tenant (browser-ops).
+2. Describe it out of band:
+
+       scripts/describe-image.sh <path> ["specific question about it"]
+
+3. **Append only the returned description.** A few hundred tokens of text
+   replaces hundreds of kilobytes of image.
+
+The description comes from a separate vision model on its own server
+(`scripts/serve-vlm.sh`, port 8081). The agent server is deliberately text-only
+— loading a vision projector there disables slot persistence, context shift and
+cache reuse for *every* conversation, which is what produces the compaction
+death spiral. See `config/llama-server.md`.
+
+Ask a specific question when you have one ("what is the exact error text?")
+rather than accepting a generic description. Non-image attachments — PDFs,
+logs, CSVs — are not this script's job; read them as text.
 
 ## Composing with navigation
 

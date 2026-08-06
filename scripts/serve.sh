@@ -7,27 +7,15 @@ command -v llama-server >/dev/null 2>&1 \
   || { echo "ERROR: llama-server not found — run setup/01-install.sh" >&2; exit 1; }
 
 # -hf downloads weights on first run and caches them (LLAMA_CACHE, default
-# ~/Library/Caches/llama.cpp). The mmproj projector is fetched automatically
-# from the same repo when one is published (--mmproj-auto, on by default).
+# ~/Library/Caches/llama.cpp). This server runs TEXT ONLY -- the projector is
+# explicitly not loaded, see --no-mmproj-auto below.
 #
 # MTP build: bundles a multi-token-prediction head for self-speculative
 # decoding -- ~1.4-2.2x faster generation, no quality loss, no separate draft
 # model. Costs ~2.5% more disk and ~2 GB RAM.
-#
-# If this repo turns out NOT to ship an mmproj, vision breaks and computer use
-# degrades to accessibility-tree-only. setup/03-verify.sh probes for exactly
-# that. Fall back to the non-MTP repo (trading speed for vision) with:
-#   WORK_AGENT_MODEL=unsloth/Qwen3.6-35B-A3B-GGUF:Q4_K_M scripts/serve.sh
 MODEL="${WORK_AGENT_MODEL:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_M}"
 PORT="${WORK_AGENT_PORT:-8080}"
 CTX="${WORK_AGENT_CTX:-65536}"
-
-# Vision prefill is the bottleneck in computer-use loops, not decode: this
-# model activates ~3B params per token, so it generates fast but spends real
-# time *reading* each screenshot. Qwen3.6-VL uses dynamic resolution, so this
-# cap is a genuine dial. Lower it until SOM element numbers stop being legible
-# -- a full Retina capture is mostly wasted pixels for reading numbered marks.
-IMG_MAX_TOKENS="${WORK_AGENT_IMG_MAX_TOKENS:-1024}"
 
 # KV cache type. f16 on purpose -- do NOT set this to q8_0 without measuring.
 #
@@ -75,6 +63,14 @@ UBATCH="${WORK_AGENT_UBATCH:-512}"
 # is the latency-sensitive path. WORK_AGENT_THINK=on to restore it.
 THINK="${WORK_AGENT_THINK:-off}"
 
+# Where warm KV slots are persisted. Enables POST /slots/{id}?action=save|restore
+# so a stable prefix can be prefilled ONCE and restored per session, instead of
+# paying ~24k tokens of cold prefill every time. The flag only creates the
+# directory contract -- something has to call the endpoints. See
+# config/llama-server.md.
+SLOTS="${WORK_AGENT_SLOTS:-$HOME/.cache/work-agent-slots}"
+mkdir -p "$SLOTS"
+
 ARGS=(
   -hf "$MODEL"
   --port "$PORT"
@@ -83,7 +79,26 @@ ARGS=(
   -fa on                        # helps regardless; the penalty is FA + quantized KV
   -ctk "$KV_TYPE" -ctv "$KV_TYPE"
   -b "$BATCH" -ub "$UBATCH"
-  --image-max-tokens "$IMG_MAX_TOKENS"
+
+  # TEXT ONLY -- do not load a vision projector on this server.
+  #
+  # llama.cpp #21133: when an mmproj is loaded, has_mtmd is set on every slot
+  # as a CAPABILITY flag, not a data flag. The server then treats every
+  # conversation as multimodal and disables slot persistence, context shift and
+  # cache reuse -- even for text-only requests, which is all of ours.
+  # #23371 additionally reports MTP + Vision OOMing during mmproj restore on
+  # this model family, and we run MTP.
+  #
+  # Vision is not lost: it moved to a second server. scripts/serve-vlm.sh runs a
+  # small VLM whose only job is describing ticket attachments, called one-shot
+  # and out of band so images never enter this model's context or its cache.
+  --no-mmproj-auto
+
+  # Now meaningful again, because the mmproj was what disabled it. Reuses the
+  # stable system+skills prefix across turns via KV shifting.
+  --cache-reuse 256
+
+  --slot-save-path "$SLOTS"
 )
 
 # Self-speculative decoding. Opt out with WORK_AGENT_SPEC=off if you switch to
@@ -95,33 +110,19 @@ if [ "$THINK" = "off" ]; then
          --chat-template-kwargs '{"enable_thinking": false}')
 fi
 
-# --cache-reuse and --keep were REMOVED 2026-08-05. Both were dead here:
+# --keep stays out: it is read only inside the context-shift branch, and
+# --context-shift is left at its default (disabled) deliberately. Failing
+# loudly at the limit beats silently discarding the start of a conversation.
 #
-#   --cache-reuse reuses cache via KV *shifting*, and llama-server forces it to
-#   0 at startup when an mmproj is loaded (which this stack does -- the vision
-#   probe passes), logging "cache_reuse is not supported by multimodal, it will
-#   be disabled". It is also skipped per-request for prompts carrying images.
-#
-#   --keep is only read inside the context-shift branch, and context shift is
-#   off, so --keep -1 did nothing at all.
-#
-# This does NOT mean caching is off. Ordinary longest-common-prefix reuse still
-# works and is what makes later turns cheap -- measured, first call ~24k tokens,
-# subsequent calls a fraction. What does not work is reuse with HOLES, which is
-# why history must be append-only: see config/llama-server.md.
-#
-# --context-shift is left at its default (disabled) on purpose. Shifting a
-# context that contains a rolling window of screenshots silently discards
-# images mid-task; failing loudly at the limit is the better trade here.
-#
-# --keep -1 matters more than it looks: llama.cpp #23030 (open, closed as
-# not-planned) drops the prompt cache on truncation for this model family.
-# Pinning the prefix is a partial mitigation, not a fix -- the real lever is
-# keeping images small enough that you don't approach the limit.
+# --cache-reuse is back as of 2026-08-06. It was removed on the 5th as "dead",
+# which was true but for the wrong reason: the mmproj was disabling it, and we
+# were treating the mmproj as fixed. It is not -- see --no-mmproj-auto above.
 
 echo "==> llama-server on :$PORT"
 echo "    model: $MODEL"
 echo "    ctx: $CTX  kv: $KV_TYPE  batch: $BATCH/$UBATCH  spec: ${WORK_AGENT_SPEC:-on}  think: $THINK"
+echo "    text-only (no mmproj) -- vision lives on scripts/serve-vlm.sh"
+echo "    slots: $SLOTS"
 echo "    Watch the startup log for: all layers offloaded to GPU, and (if spec"
 echo "    is on) a draft acceptance rate once generation starts. No acceptance"
 echo "    stats at all means draft-mtp never engaged."

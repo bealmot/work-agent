@@ -109,21 +109,39 @@ probe "system-only prompt renders" '"content"' "{
   "possible: something other than llama-server is answering on this port —" \
   "under llama.cpp the mlx-vlm jinja bug cannot occur. Check with: lsof -i"
 
-# Computer use sends screenshots to this model. A 1x1 transparent PNG is
-# enough to prove the multimodal path accepts image parts at all.
-echo "==> Vision path (required for computer use)"
+# The agent server is deliberately TEXT-ONLY, so this probe is inverted: an
+# image being ACCEPTED here is the failure. A loaded mmproj sets has_mtmd on
+# every slot as a capability flag, and llama-server then disables slot
+# persistence, context shift and cache reuse for text conversations too
+# (llama.cpp #21133) — which is what produced the compaction death spiral.
+echo "==> Agent server must be text-only"
 PNG="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-probe "model accepts image input" '"content"' "{
-    \"model\": \"$MODEL_ID\",
-    \"messages\": [{\"role\": \"user\", \"content\": [
-      {\"type\": \"text\", \"text\": \"Reply with the single word: ok\"},
-      {\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/png;base64,$PNG\"}}
-    ]}],
-    \"max_tokens\": 8
-  }" \
-  "possible: no mmproj projector loaded — the -hf repo may publish none." \
-  "Fall back to the non-MTP repo, or point -mm at one explicitly." \
-  "Without this, computer use degrades to accessibility-tree-only (mode=ax)."
+VBODY="{\"model\":\"$MODEL_ID\",\"messages\":[{\"role\":\"user\",\"content\":[
+    {\"type\":\"text\",\"text\":\"ok\"},
+    {\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,$PNG\"}}]}],
+    \"max_tokens\":8}"
+VRESP=$(curl -s "$API/v1/chat/completions" -H "Content-Type: application/json" \
+        -d "$VBODY" 2>/dev/null)
+if printf '%s' "$VRESP" | grep -q '"content"'; then
+  echo "FAIL  agent server ACCEPTED an image — a projector is loaded"
+  echo "      scripts/serve.sh must pass --no-mmproj-auto. With a projector"
+  echo "      present, slot persistence, context shift and cache reuse are"
+  echo "      disabled for text conversations too (llama.cpp #21133)."
+  FAIL=$((FAIL+1))
+else
+  echo "PASS  agent server is text-only (image rejected, as intended)"
+  PASS=$((PASS+1))
+fi
+
+# Vision moved to its own server. Optional: absent only means ticket
+# attachments cannot be described yet.
+VLM_API="http://localhost:${WORK_AGENT_VLM_PORT:-8081}"
+if curl -s -o /dev/null "$VLM_API/health" 2>/dev/null; then
+  echo "PASS  vision server up on $VLM_API"; PASS=$((PASS+1))
+else
+  echo "INFO  no vision server on $VLM_API (optional — start"
+  echo "      scripts/serve-vlm.sh when you need attachments described)"
+fi
 
 echo
 echo "==> $PASS passed, $FAIL failed"

@@ -19,15 +19,17 @@ explicit flags, so they are debuggable and greppable.
 
 | Flag | Value | Why |
 |---|---|---|
-| `-hf <repo>:<quant>` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_M` | Downloads and caches weights; auto-fetches the mmproj projector from the same repo |
+| `-hf <repo>:<quant>` | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_M` | Downloads and caches weights |
 | `--spec-type draft-mtp` | on | Self-speculative decoding via the bundled MTP head — ~1.4–2.2× faster generation, no quality loss, no separate draft model |
-| `--image-max-tokens` | 1024 | Caps vision-prefill cost per screenshot. **The main computer-use latency dial** |
+| `--no-mmproj-auto` | — | **Text only.** A loaded projector disables slot persistence, context shift and cache reuse for every conversation (#21133). Vision lives on `scripts/serve-vlm.sh` |
+| `--cache-reuse 256` | — | Reuses the stable system+skills prefix. Meaningful again now the mmproj is gone |
+| `--slot-save-path` | `~/.cache/work-agent-slots` | Enables `/slots` save+restore, so a warm prefix survives across sessions |
 | `-ngl all` | — | Unified memory: all layers on the GPU |
 | `-fa on` | — | Flash attention. Helps on its own; the penalty is FA *combined with* quantized KV |
 | `-ctk/-ctv` | **f16** | Deliberately unquantized — see "The KV cache trap" below. Override with `WORK_AGENT_KV` |
 | `-c` | 65536 | Hermes requires ≥64k; agent loops need the room |
 | `--jinja` | *default on* | Not passed explicitly — llama-server enables it already |
-| `--context-shift` | *default off* | Force-disabled by the mmproj anyway; left unset explicitly |
+| `--context-shift` | *default off* | Available again without the mmproj, but left off: failing loudly at the limit beats silently dropping the start of a conversation |
 
 ## Performance
 
@@ -109,7 +111,8 @@ and how many steps there are. Flags come second.
    them in `local/sites.yaml`.
 5. **KV at f16** — the largest single *flag*-level decode factor found so far.
 6. **`--spec-type draft-mtp`**, once verified as engaging.
-7. **`--image-max-tokens`** — only matters on the pixel fallback now.
+7. **`--no-mmproj-auto`** — not a speed flag, a *caching* flag. It restores
+   slot persistence, context shift and cache reuse in one move.
 8. **Take fewer steps.** The fastest action is one that needs no model call:
    deterministic skills for known sequences, model involvement only for
    judgment. This dwarfs every flag on this page.
@@ -143,6 +146,44 @@ full-attention model with server-side context editing, where it is applied
 after cache lookup. Here it spends a full re-prefill to buy back space that then
 costs a full re-prefill on every subsequent turn. The harness's own defence
 mechanism is the thing that kills the session.
+
+### The structural fix: no projector on the agent server
+
+llama.cpp [#21133](https://github.com/ggml-org/llama.cpp/issues/21133): when an
+mmproj is loaded, `has_mtmd` is set on every slot as a **capability** flag, not
+a data flag. The server then treats every conversation as multimodal and
+disables **slot persistence, context shift, and cache reuse** — including for
+text-only requests, which is all of ours.
+
+We were carrying a projector we never used (the shim forces
+`include_screenshot: false`, and layer-0 reads are JSON), and it was silently
+disabling three caching mechanisms. `scripts/serve.sh` now passes
+`--no-mmproj-auto`, which restores all three. [#23371](https://github.com/ggml-org/llama.cpp/issues/23371)
+gives a second reason: MTP + Vision can OOM during mmproj restore on this model
+family, and we run MTP.
+
+**Vision is not lost.** It moved to `scripts/serve-vlm.sh` — a small VLM on port
+8081 whose only job is describing ticket attachments, called one-shot via
+`scripts/describe-image.sh`. Images never enter the agent's context; only a few
+hundred tokens of description do. Quarantining a cache-hostile capability in a
+process that holds no conversation state is the same move as sub-agent
+delegation, applied to a modality.
+
+### Warm-start with persisted KV slots
+
+`--slot-save-path` enables `POST /slots/{id}?action=save|restore`, so a stable
+prefix can be prefilled **once**, saved, and restored at the start of each new
+session — turning a ~24k cold prefill into roughly nothing.
+
+The flag only creates the directory contract; **something has to call the
+endpoints.** Until it does, `--slot-save-path` changes nothing on its own.
+
+This is what makes "one task per session" cheap rather than merely disciplined:
+if a fresh session costs no prefill, there is never a reason to keep one alive
+long enough to compact. Note [#24055](https://github.com/ggml-org/llama.cpp/issues/24055)
+— context *checkpoints* are always invalidated on hybrid/recurrent models. That
+is a different mechanism from slot save/restore, so verify rather than assume
+both work.
 
 ### Avoiding it
 
