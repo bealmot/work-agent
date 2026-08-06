@@ -27,6 +27,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 
 MAX_ELEMENTS = int(os.environ.get("CUA_SHIM_MAX_ELEMENTS", "300"))
 MAX_DEPTH = int(os.environ.get("CUA_SHIM_MAX_DEPTH", "10"))
@@ -218,11 +219,29 @@ def pump_out(child):
         sys.stdout.buffer.flush()
 
 
+def pump_err(child):
+    """Driver stderr -> our log.
+
+    Without this the driver's own error output goes to the shim's inherited
+    stderr, which the MCP host routes wherever it likes -- usually nowhere
+    visible. A driver crash then presents as "the MCP server died" with no
+    reason attached, and the shim gets blamed for it because the shim is the
+    process the host spawned.
+    """
+    for line in child.stderr:
+        text = line.decode("utf-8", "replace").rstrip()
+        if text:
+            log(f"driver: {text}")
+
+
 def main():
     argv = [DRIVER, "mcp"] + sys.argv[1:]
     try:
         child = subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
     except FileNotFoundError:
         print(f"[cua-shim] cannot exec {DRIVER}", file=sys.stderr)
@@ -234,22 +253,57 @@ def main():
         f"screenshots={'allowed' if ALLOW_SHOT else 'forced off'})"
     )
 
-    t = threading.Thread(target=pump_out, args=(child,), daemon=True)
-    t.start()
+    threading.Thread(target=pump_out, args=(child,), daemon=True).start()
+    threading.Thread(target=pump_err, args=(child,), daemon=True).start()
 
+    # The call the driver was last handling -- set only AFTER a successful
+    # write. Tracking the last request *read* instead would blame whichever
+    # request happened to arrive next, which is the one thing a crash report
+    # must not do.
+    last_sent = None
     try:
         for raw in sys.stdin.buffer:
-            out = rewrite(raw.decode("utf-8", "replace"))
-            child.stdin.write(out.encode("utf-8") if isinstance(out, str) else out)
-            child.stdin.flush()
-    except BrokenPipeError:
-        pass
+            text = raw.decode("utf-8", "replace")
+            name = None
+            try:
+                m = json.loads(text)
+                if isinstance(m, dict) and m.get("method") == "tools/call":
+                    name = (m.get("params") or {}).get("name")
+            except (ValueError, TypeError):
+                pass
+
+            if child.poll() is not None:
+                log(f"driver already dead (code {child.returncode}) when "
+                    f"'{name}' arrived; it died handling '{last_sent}'")
+                break
+
+            out = rewrite(text)
+            try:
+                child.stdin.write(out.encode("utf-8") if isinstance(out, str) else out)
+                child.stdin.flush()
+            except (BrokenPipeError, OSError):
+                log(f"driver closed its input while '{last_sent}' was in "
+                    f"flight; could not deliver '{name}'")
+                break
+            if name:
+                last_sent = name
     finally:
         try:
             child.stdin.close()
         except Exception:
             pass
-    return child.wait()
+
+    rc = child.wait()
+    # Give the stderr pump a moment to flush the driver's parting words.
+    time.sleep(0.2)
+    if rc != 0:
+        log(f"driver exited with code {rc} (driver was handling: {last_sent}). "
+            f"The shim forwards non-window tools verbatim, so a crash here is "
+            f"the driver's, not the clamp's -- reproduce it without the shim: "
+            f"cua-driver call {last_sent or '<tool>'} ...")
+    else:
+        log(f"driver exited cleanly (driver was handling: {last_sent})")
+    return rc
 
 
 if __name__ == "__main__":
