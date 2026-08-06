@@ -264,9 +264,40 @@ Task: **"list the ids and statuses of the top 3 unsolved tickets."**
 
 ---
 
-## Results template
+## Results — TWO artifacts, and the short one matters most
 
-Write to `local/test-results/zendesk-probe.md`:
+The return channel from this machine is a **screenshot**. A long results file
+cannot be transmitted. So produce both:
+
+### A. The scorecard — print this to the terminal, one screen, no prose
+
+This is what actually gets read. Keep it under ~30 lines. Numbers and verdicts
+only; no explanation, no recommendations.
+
+```
+ZENDESK PROBE  <date>
+S1 appleevents=<on|off|enabled-by-me>  S2 mutations=<1|unset>
+T0  channel        PASS|FAIL  url=<host or about:blank>
+T1  api /users/me  PASS|FAIL  http=<code>  awaitform=<top|wrapped|both-fail>
+T2  views          PASS|FAIL  n=<count>  unsolved_id=<id>
+T3  queue api      PASS|FAIL  n=<tickets>  chars=<n>  ui_order_match=<y|n>
+T4  ticket api     PASS|FAIL  comments=<n>  chars=<n>  ui_count_match=<y|n>
+T5  chars   api=<n>  ax_scoped=<n>  ax_full=<n>  truncated=<y|n>
+    ratio   api:scoped:full = 1 : <x> : <y>
+T6  urlnav  ok=<n>/5  addrbar_idx=<i,i,i,i,i>  stable=<y|n>
+T7  drift   same ticket idx at rest = <i,i,i,i,i>  distinct=<n>
+T8  query   no_query chars=<n>  with_query chars=<n>  reduced=<y|n>
+T9  csrf    token_present=<y|n>
+T10 top3    api=<s>s/<tok>tok   gui=<s>s/<tok>tok
+SURPRISES: <one line, or "none">
+```
+
+### B. The full record — `local/test-results/zendesk-probe.md`
+
+Raw responses, one block per test, for the archive. It stays on the machine.
+Write it anyway: it is what gets consulted when the scorecard raises a question.
+
+Template:
 
 ```markdown
 # Zendesk probe — results (YYYY-MM-DD)
